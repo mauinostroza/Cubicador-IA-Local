@@ -19,7 +19,16 @@ def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, inte
             (target.with_suffix(target.suffix + ".pages") / f"page-{number:04d}.txt").write_bytes(page.encode("utf-8"))
     candidates = locate_summary_tables(document)
     if not candidates:
-        result = ExtractionResult(archivo=path.name, tabla_encontrada=False, titulo_tabla=None, filas=[], advertencias=["No se encontró una tabla resumen de cantidades"], sha256=digest, page_count=len(document.pages), extractor_version="pdftotext-layout")
+        extracted_characters = sum(len("".join(page.split())) for page in document.pages)
+        warnings = [
+            "No se encontró una 'Tabla de cubicación' o 'Cuadro de cubicación' en el texto extraíble"
+        ]
+        if extracted_characters < 500:
+            warnings.append(
+                "El PDF contiene muy poco texto seleccionable. La tabla puede verse en pantalla, "
+                "pero estar dibujada como geometría CAD; este alcance no utiliza OCR"
+            )
+        result = ExtractionResult(archivo=path.name, tabla_encontrada=False, titulo_tabla=None, filas=[], requiere_revision=extracted_characters < 500, advertencias=warnings, sha256=digest, page_count=len(document.pages), extractor_version="pdftotext-layout")
     else:
         close_candidates = [value for value in candidates[1:] if value.score >= candidates[0].score - 5]
         if close_candidates:
