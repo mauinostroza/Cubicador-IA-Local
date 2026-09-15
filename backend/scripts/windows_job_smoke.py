@@ -47,14 +47,17 @@ def main() -> int:
             os_handle = msvcrt.get_osfhandle(inherited.fileno())
             try:
                 os.set_handle_inheritable(os_handle, True)
-                leaked = Path(directory) / "handle-leaked.txt"
-                probe = ("import ctypes,pathlib;flags=ctypes.c_ulong();ok=ctypes.windll.kernel32.GetHandleInformation("
-                    f"{os_handle},ctypes.byref(flags));pathlib.Path({str(leaked)!r}).write_text(str(ok))")
+                # Los valores numéricos de HANDLE son locales a cada proceso y
+                # Windows puede reutilizarlos. GetHandleInformation por sí solo
+                # produciría falsos positivos. La prueba válida es comprobar si
+                # el hijo puede escribir realmente sobre este objeto de archivo.
+                probe = ("import ctypes;data=ctypes.create_string_buffer(b'LEAK');written=ctypes.c_ulong();"
+                    f"ctypes.windll.kernel32.WriteFile({os_handle},data,4,ctypes.byref(written),None)")
                 run_command([sys.executable, "-c", probe], workspace=directory, policy=policy)
-                if leaked.read_text() != "0":
-                    raise AssertionError("Se heredó un handle fuera de HANDLE_LIST")
             finally:
                 os.set_handle_inheritable(os_handle, False)
+        if sentinel.read_bytes():
+            raise AssertionError("Se heredó un handle fuera de HANDLE_LIST")
     print("PASS: gate, árbol, flood y HANDLE_LIST")
     return 0
 
