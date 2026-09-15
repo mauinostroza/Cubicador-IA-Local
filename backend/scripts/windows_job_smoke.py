@@ -15,13 +15,7 @@ def main() -> int:
         print("SKIP: smoke exclusivo de Windows")
         return 0
     with tempfile.TemporaryDirectory() as directory:
-        policy = SecurityPolicy(windows_job_objects_enabled=True, max_process_output_bytes=4096)
-        try:
-            run_command([sys.executable, "-c", "print('blocked')"], workspace=directory)
-        except Exception:
-            pass
-        else:
-            raise AssertionError("El feature gate debía bloquear la política predeterminada")
+        policy = SecurityPolicy(max_process_output_bytes=4096)
         marker = Path(directory) / "child-survived.txt"
         child = f"import time,pathlib;time.sleep(4);pathlib.Path({str(marker)!r}).write_text('bad')"
         parent = f"import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',{child!r}]);time.sleep(30)"
