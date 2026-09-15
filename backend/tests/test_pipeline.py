@@ -1,4 +1,5 @@
 import subprocess
+import json
 import sys
 import tempfile
 import unittest
@@ -15,7 +16,7 @@ from cubicador.pdf_text import PdfText
 from cubicador.pipeline import process_pdf
 from cubicador.adapters import parse_number
 from cubicador.adapters import LlamaServerInterpreter
-from cubicador.runtime import JobWorkspace, run_command, safe_output_path
+from cubicador.runtime import AuditStore, JobWorkspace, run_command, safe_output_path
 from cubicador.security import SecurityPolicy, SecurityViolation
 
 
@@ -69,6 +70,11 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(workbook.sheetnames, ["Cantidades", "Pendientes", "Trazabilidad"])
             self.assertIn("Acero A630-420H", result.filas[1].evidencia.text)
             self.assertEqual(result.filas[1].quantities[0].original, "8.450,00")
+            audit_files = list((root / ".cubicador-audit").glob("*.jsonl"))
+            self.assertEqual(len(audit_files), 1)
+            audit_text = audit_files[0].read_text("ascii")
+            self.assertIn('"job_completed"', audit_text)
+            self.assertNotIn("Hormigón", audit_text)
 
     def test_preserves_empty_page_numbering(self):
         from cubicador.adapters import HeuristicInterpreter
@@ -110,6 +116,13 @@ class PipelineTests(unittest.TestCase):
 
 
 class SecurityTests(unittest.TestCase):
+    def setUp(self):
+        self._runtime_temp = tempfile.TemporaryDirectory()
+        self.runtime_workspace = Path(self._runtime_temp.name)
+
+    def tearDown(self):
+        self._runtime_temp.cleanup()
+
     def test_policy_rejects_invalid_or_incoherent_limits(self):
         for kwargs in (
             {"max_pdf_bytes": 0}, {"max_queued_jobs": -1},
@@ -179,12 +192,12 @@ class SecurityTests(unittest.TestCase):
     def test_subprocess_output_is_bounded_during_execution(self):
         policy = SecurityPolicy(max_process_output_bytes=1024)
         with self.assertRaises(SecurityViolation):
-            run_command([sys.executable, "-c", "import os; os.write(1, b'x' * 1000000)"], policy=policy)
+            run_command([sys.executable, "-c", "import os; os.write(1, b'x' * 1000000)"], policy=policy, workspace=self.runtime_workspace)
 
     def test_fast_exit_output_is_checked_before_reading(self):
         policy = SecurityPolicy(max_process_output_bytes=64)
         with self.assertRaises(SecurityViolation):
-            run_command([sys.executable, "-c", "import os; os.write(1, b'x' * 4096)"], policy=policy)
+            run_command([sys.executable, "-c", "import os; os.write(1, b'x' * 4096)"], policy=policy, workspace=self.runtime_workspace)
 
     def test_workspace_quota_is_enforced(self):
         workspace = JobWorkspace(SecurityPolicy(max_temp_bytes=16, max_output_bytes=8, max_response_bytes=8))
@@ -192,6 +205,53 @@ class SecurityTests(unittest.TestCase):
             (path / "overflow.bin").write_bytes(b"x" * 17)
             with self.assertRaises(SecurityViolation):
                 workspace.check_quota()
+
+    def test_audit_is_bounded_and_rejects_sensitive_fields(self):
+        with tempfile.TemporaryDirectory() as directory:
+            policy = SecurityPolicy(max_audit_bytes=2000)
+            audit = AuditStore(directory, policy).start_job()
+            audit.append("job_started", "ok", bytes=12)
+            content = audit.path.read_text("ascii")
+            self.assertIn('"job_started"', content)
+            self.assertNotIn("plano", content)
+            with self.assertRaises(SecurityViolation):
+                audit.append("event", "ok", document_text="secreto")
+            with self.assertRaises(SecurityViolation):
+                for _ in range(20):
+                    audit.append("tick", "ok")
+
+    def test_audit_hash_chain_terminal_and_retention(self):
+        with tempfile.TemporaryDirectory() as directory:
+            policy = SecurityPolicy(max_audit_files=2)
+            store = AuditStore(directory, policy)
+            first = store.start_job()
+            first.append("job_started", "ok")
+            first.append("job_completed", "ok")
+            records = [json.loads(line) for line in first.path.read_text("ascii").splitlines()]
+            self.assertEqual(records[1]["previous_hash"], records[0]["event_hash"])
+            self.assertEqual([row["seq"] for row in records], [1, 2])
+            self.assertEqual(records[0]["schema"], 1)
+            self.assertEqual(len(records[0]["policy_hash"]), 64)
+            with self.assertRaises(SecurityViolation):
+                first.append("tick", "ok")
+            second = store.start_job(); second.append("job_completed", "ok")
+            store.start_job()
+            self.assertLessEqual(len(list((Path(directory) / ".cubicador-audit").glob("*.jsonl"))), 2)
+
+    def test_audit_verifier_detects_tampering(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AuditStore(directory)
+            audit = store.start_job(); audit.append("job_started", "ok"); audit.append("job_completed", "ok")
+            self.assertTrue(store.verify(audit.path))
+            data = audit.path.read_bytes().replace(b'"status":"ok"', b'"status":"xx"', 1)
+            audit.path.write_bytes(data)
+            self.assertFalse(store.verify(audit.path))
+
+    def test_windows_dispatch_is_fail_closed(self):
+        with patch("cubicador.runtime._is_windows", return_value=True), patch("cubicador.runtime._run_windows_job", side_effect=OSError("job failed")) as runner:
+            with self.assertRaises(OSError):
+                run_command([sys.executable, "-c", "print(1)"], workspace=self.runtime_workspace, policy=SecurityPolicy(windows_job_objects_enabled=True))
+            runner.assert_called_once()
 
     def test_workspace_is_cleaned(self):
         workspace = JobWorkspace()
@@ -204,9 +264,9 @@ class SecurityTests(unittest.TestCase):
         import threading
         cancelled = threading.Event(); cancelled.set()
         with self.assertRaises(Exception):
-            run_command([sys.executable, "-c", "print('no')"], cancel=cancelled)
+            run_command([sys.executable, "-c", "print('no')"], cancel=cancelled, workspace=self.runtime_workspace)
         with self.assertRaises(TimeoutError):
-            run_command([sys.executable, "-c", "import time; time.sleep(2)"], timeout=1)
+            run_command([sys.executable, "-c", "import time; time.sleep(2)"], timeout=1, workspace=self.runtime_workspace)
 
     def test_running_subprocess_can_be_cancelled(self):
         import threading, time
@@ -214,7 +274,7 @@ class SecurityTests(unittest.TestCase):
         timer = threading.Timer(0.1, cancelled.set); timer.start()
         started = time.monotonic()
         with self.assertRaises(Exception):
-            run_command([sys.executable, "-c", "import time; time.sleep(5)"], cancel=cancelled)
+            run_command([sys.executable, "-c", "import time; time.sleep(5)"], cancel=cancelled, workspace=self.runtime_workspace)
         timer.cancel()
         self.assertLess(time.monotonic() - started, 2)
 

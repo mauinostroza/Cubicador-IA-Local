@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from .security import DEFAULT_SECURITY_POLICY, SecurityPolicy
-from .runtime import run_command
+from .runtime import AuditLog, run_command
 
 
 class PdfTextError(RuntimeError):
@@ -20,7 +20,7 @@ class PdfText:
         return self.raw or "\f".join(self.pages)
 
 
-def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy = DEFAULT_SECURITY_POLICY) -> PdfText:
+def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy, workspace: Path, audit: AuditLog | None = None) -> PdfText:
     try:
         path = policy.validate_pdf(pdf_path)
     except (ValueError, OSError) as exc:
@@ -35,7 +35,7 @@ def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy = DEFAULT_S
         raise PdfTextError("No se encontró pdftotext en la ubicación controlada de Poppler")
     completed = run_command(
         [str(executable_path), "-layout", "-enc", "UTF-8", str(path), "-"],
-        policy=policy,
+        policy=policy, workspace=workspace, audit=audit,
     )
     if completed.returncode != 0:
         raise PdfTextError(completed.stderr.decode("utf-8", "replace").strip() or "pdftotext falló")

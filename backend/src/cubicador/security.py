@@ -23,6 +23,15 @@ class SecurityPolicy:
     max_queued_jobs: int = 2
     max_pages: int = 200
     allowed_model_ports: tuple[int, ...] = (8080,)
+    windows_job_memory_bytes: int = 2 * 1024 * 1024 * 1024
+    windows_process_memory_bytes: int = 1536 * 1024 * 1024
+    windows_active_process_limit: int = 4
+    windows_cpu_rate_percent: int = 80
+    max_audit_bytes: int = 1024 * 1024
+    max_audit_total_bytes: int = 10 * 1024 * 1024
+    max_audit_files: int = 100
+    windows_job_objects_enabled: bool = False
+    termination_grace_seconds: int = 5
 
     def __post_init__(self) -> None:
         positive = (
@@ -30,6 +39,11 @@ class SecurityPolicy:
             self.max_response_bytes, self.max_process_output_bytes,
             self.subprocess_timeout_seconds, self.model_timeout_seconds,
             self.max_concurrent_jobs, self.max_pages,
+            self.windows_job_memory_bytes, self.windows_process_memory_bytes,
+            self.windows_active_process_limit, self.windows_cpu_rate_percent,
+            self.max_audit_bytes,
+            self.max_audit_total_bytes, self.max_audit_files,
+            self.termination_grace_seconds,
         )
         if any(value <= 0 for value in positive) or self.max_queued_jobs < 0:
             raise ValueError("Todos los límites deben ser positivos y la cola no negativa")
@@ -37,6 +51,12 @@ class SecurityPolicy:
             raise ValueError("Las salidas y respuestas no pueden superar la cuota temporal")
         if not self.allowed_model_ports or any(not 1 <= port <= 65535 for port in self.allowed_model_ports):
             raise ValueError("Los puertos permitidos deben estar entre 1 y 65535")
+        if self.windows_process_memory_bytes > self.windows_job_memory_bytes:
+            raise ValueError("La memoria por proceso no puede superar la memoria del Job")
+        if self.windows_cpu_rate_percent > 100:
+            raise ValueError("El límite de CPU debe estar entre 1 y 100")
+        if self.max_audit_bytes > self.max_audit_total_bytes:
+            raise ValueError("La cuota de un log no puede superar la cuota global")
 
     def validate_pdf(self, value: str | Path) -> Path:
         _reject_unsafe_path_text(value)

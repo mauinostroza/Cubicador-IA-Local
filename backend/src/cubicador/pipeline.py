@@ -6,7 +6,7 @@ from .excel import export_excel
 from .locator import locate_summary_tables
 from .models import ExtractionResult
 from .pdf_text import extract_layout_text
-from .runtime import JobGate, JobWorkspace, atomic_write_bytes, safe_output_path
+from .runtime import AuditStore, JobGate, JobWorkspace, atomic_write_bytes, safe_output_path
 from .security import DEFAULT_SECURITY_POLICY, SecurityPolicy, SecurityViolation
 
 
@@ -20,15 +20,25 @@ def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, inte
     excel_target = safe_output_path(excel_path, output_root, ".xlsx") if excel_path is not None else None
     text_target = safe_output_path(text_path, output_root, ".txt") if text_path is not None else None
     gate = _JOB_GATE if policy is DEFAULT_SECURITY_POLICY else JobGate(policy)
+    audit = AuditStore(output_root, policy).start_job() if output_root is not None else None
+    if audit:
+        audit.append("job_started", "ok", bytes=path.stat().st_size)
     job_workspace = JobWorkspace(policy)
-    with gate, job_workspace as workspace:
-        result = _process_pdf(path, excel_target, interpreter, text_target, policy, workspace)
-        job_workspace.check_quota()
+    try:
+        with gate, job_workspace as workspace:
+            result = _process_pdf(path, excel_target, interpreter, text_target, policy, workspace, audit)
+            job_workspace.check_quota()
+        if audit:
+            audit.append("job_completed", "ok")
         return result
+    except Exception as exc:
+        if audit:
+            audit.append("job_failed", "error", detail_code=type(exc).__name__)
+        raise
 
 
-def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpreter | None, text_path: Path | None, policy: SecurityPolicy, workspace: Path) -> ExtractionResult:
-    document = extract_layout_text(path, policy)
+def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpreter | None, text_path: Path | None, policy: SecurityPolicy, workspace: Path, audit=None) -> ExtractionResult:
+    document = extract_layout_text(path, policy, workspace, audit)
     hasher = hashlib.sha256()
     with path.open("rb") as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):

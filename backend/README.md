@@ -1,7 +1,9 @@
 # Backend piloto
 
-> En Windows, los subprocesos permanecen bloqueados de forma segura hasta
-> integrar Job Objects. El EXE no habilitará Poppler/OCR sin ese supervisor.
+> En Windows, los subprocesos se crean suspendidos, se asignan a un Job Object
+> con límites y recién entonces se reanudan. Antes de distribuir el EXE debe
+> aprobarse `scripts/windows_job_smoke.py` y el workflow Windows. El feature gate
+> permanece desactivado por defecto y solo el smoke lo habilita explícitamente.
 
 Procesa únicamente PDF con capa de texto. No contiene OCR, visión, APIs externas ni cálculo geométrico.
 
