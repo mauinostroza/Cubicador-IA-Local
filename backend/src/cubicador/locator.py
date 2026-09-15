@@ -7,7 +7,15 @@ from dataclasses import dataclass
 from .pdf_text import PdfText
 
 
-TITLE_WORDS = ("resumen de cantidades", "cuadro de cantidades", "resumen cantidades", "cantidades de obra")
+TITLE_WORDS = (
+    "tabla de cubicacion",
+    "cuadro de cubicacion",
+    "tabla resumen de cantidades",
+    "resumen de cantidades",
+    "cuadro de cantidades",
+    "resumen cantidades",
+    "cantidades de obra",
+)
 HEADER_WORDS = ("item", "ítem", "descripcion", "descripción", "unidad", "cantidad")
 
 
