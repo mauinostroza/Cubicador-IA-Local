@@ -6,17 +6,36 @@ from .excel import export_excel
 from .locator import locate_summary_tables
 from .models import ExtractionResult
 from .pdf_text import extract_layout_text
+from .runtime import JobGate, JobWorkspace, atomic_write_bytes, safe_output_path
+from .security import DEFAULT_SECURITY_POLICY, SecurityPolicy, SecurityViolation
 
 
-def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, interpreter: TableInterpreter | None = None, text_path: str | Path | None = None) -> ExtractionResult:
-    path = Path(pdf_path)
-    document = extract_layout_text(path)
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+_JOB_GATE = JobGate(DEFAULT_SECURITY_POLICY)
+
+
+def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, interpreter: TableInterpreter | None = None, text_path: str | Path | None = None, *, output_root: str | Path | None = None, policy: SecurityPolicy = DEFAULT_SECURITY_POLICY) -> ExtractionResult:
+    path = policy.validate_pdf(pdf_path)
+    if (excel_path is not None or text_path is not None) and output_root is None:
+        raise SecurityViolation("output_root es obligatorio para cualquier escritura")
+    excel_target = safe_output_path(excel_path, output_root, ".xlsx") if excel_path is not None else None
+    text_target = safe_output_path(text_path, output_root, ".txt") if text_path is not None else None
+    gate = _JOB_GATE if policy is DEFAULT_SECURITY_POLICY else JobGate(policy)
+    job_workspace = JobWorkspace(policy)
+    with gate, job_workspace as workspace:
+        result = _process_pdf(path, excel_target, interpreter, text_target, policy, workspace)
+        job_workspace.check_quota()
+        return result
+
+
+def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpreter | None, text_path: Path | None, policy: SecurityPolicy, workspace: Path) -> ExtractionResult:
+    document = extract_layout_text(path, policy)
+    hasher = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    digest = hasher.hexdigest()
     if text_path is not None:
-        target = Path(text_path); target.write_bytes(document.full_text.encode("utf-8"))
-        target.with_suffix(target.suffix + ".pages").mkdir(parents=True, exist_ok=True)
-        for number, page in enumerate(document.pages, 1):
-            (target.with_suffix(target.suffix + ".pages") / f"page-{number:04d}.txt").write_bytes(page.encode("utf-8"))
+        atomic_write_bytes(text_path, document.full_text.encode("utf-8"), policy)
     candidates = locate_summary_tables(document)
     if not candidates:
         extracted_characters = sum(len("".join(page.split())) for page in document.pages)
@@ -50,5 +69,5 @@ def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, inte
             if not result.filas:
                 result.requiere_revision = True
     if excel_path is not None:
-        export_excel(result, excel_path)
+        export_excel(result, excel_path, policy.max_output_bytes)
     return result

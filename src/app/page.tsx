@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 type Status = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
 export default function Home() {
+  const backendLocalDisponible = false;
   const [pdfBase64, setPdfBase64] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [tableTitle, setTableTitle] = useState('');
@@ -44,7 +45,7 @@ export default function Home() {
   );
 
   const canSubmit = Boolean(
-    pdfBase64 && tableTitle.trim() && termsText.trim() && status !== 'processing'
+    backendLocalDisponible && pdfBase64 && tableTitle.trim() && termsText.trim() && status !== 'processing'
   );
 
   const parseTerms = (text: string): string[] => {
@@ -162,6 +163,18 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {!backendLocalDisponible && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+            <AlertCircle className="mt-0.5 size-5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold">Backend local todavía no disponible</p>
+              <p className="mt-1 text-xs">
+                La extracción está deshabilitada hasta conectar y verificar el servicio Python offline.
+                Ningún documento será enviado a servicios externos.
+              </p>
+            </div>
+          </div>
+        )}
         {/* Intro banner */}
         {status === 'idle' && !result && (
           <div className="mb-6 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50 p-4 dark:border-emerald-900 dark:from-emerald-950/40 dark:to-teal-950/40">
@@ -209,6 +222,7 @@ export default function Home() {
                 <Button
                   onClick={handleExtract}
                   disabled={!canSubmit}
+                  title={!backendLocalDisponible ? 'Backend Python local no disponible' : undefined}
                   size="lg"
                   className="w-full gap-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800"
                 >

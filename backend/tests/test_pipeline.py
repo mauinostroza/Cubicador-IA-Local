@@ -2,6 +2,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -13,6 +14,9 @@ from cubicador.locator import locate_summary_table
 from cubicador.pdf_text import PdfText
 from cubicador.pipeline import process_pdf
 from cubicador.adapters import parse_number
+from cubicador.adapters import LlamaServerInterpreter
+from cubicador.runtime import JobWorkspace, run_command, safe_output_path
+from cubicador.security import SecurityPolicy, SecurityViolation
 
 
 def make_pdf(path: Path) -> None:
@@ -56,7 +60,7 @@ class PipelineTests(unittest.TestCase):
             root = Path(directory)
             pdf, xlsx = root / "plano.pdf", root / "cantidades.xlsx"
             make_pdf(pdf)
-            result = process_pdf(pdf, xlsx)
+            result = process_pdf(pdf, xlsx, output_root=root)
             self.assertTrue(result.tabla_encontrada)
             self.assertEqual(len(result.filas), 3)
             self.assertEqual(result.filas[1].quantities[0].numeric_value, 8450.0)
@@ -100,9 +104,119 @@ class PipelineTests(unittest.TestCase):
             root = Path(directory)
             pdf, xlsx, json_path = root / "plano.pdf", root / "out.xlsx", root / "out.json"
             make_pdf(pdf)
-            completed = subprocess.run([sys.executable, "-m", "cubicador.cli", str(pdf), "--excel", str(xlsx), "--json", str(json_path)], capture_output=True, text=True)
+            completed = subprocess.run([sys.executable, "-m", "cubicador.cli", str(pdf), "--output-dir", str(root), "--excel", str(xlsx), "--json", str(json_path)], capture_output=True, text=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertTrue(xlsx.exists() and json_path.exists())
+
+
+class SecurityTests(unittest.TestCase):
+    def test_policy_rejects_invalid_or_incoherent_limits(self):
+        for kwargs in (
+            {"max_pdf_bytes": 0}, {"max_queued_jobs": -1},
+            {"max_output_bytes": 20, "max_temp_bytes": 10},
+            {"allowed_model_ports": (0,)}, {"allowed_model_ports": ()},
+        ):
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                SecurityPolicy(**kwargs)
+
+    def test_policy_uses_bounded_plan_defaults(self):
+        policy = SecurityPolicy()
+        self.assertEqual(policy.max_pdf_bytes, 50 * 1024 * 1024)
+        self.assertEqual(policy.max_process_output_bytes, 2 * 1024 * 1024)
+        self.assertEqual(policy.max_queued_jobs, 2)
+
+    def test_rejects_non_loopback_model_endpoints(self):
+        invalid = (
+            "https://127.0.0.1:8080/v1/chat/completions",
+            "http://example.com:8080/v1/chat/completions",
+            "http://127.0.0.1:8080@evil.test/v1/chat/completions",
+            "http://127.0.0.1:9999/v1/chat/completions",
+            "http://127.0.0.1:8080/other",
+        )
+        for endpoint in invalid:
+            with self.subTest(endpoint=endpoint), self.assertRaises(SecurityViolation):
+                LlamaServerInterpreter(endpoint)
+
+    def test_model_refuses_redirect_and_second_request(self):
+        interpreter = LlamaServerInterpreter()
+        candidate = locate_summary_table(PdfText(("TABLA DE CUBICACIÓN\nItem  Descripción  Unidad  Cantidad\n1  H  m3  2",)))
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.status = 302
+        with patch("urllib.request.OpenerDirector.open", side_effect=SecurityViolation("redirect")):
+            with self.assertRaises(SecurityViolation):
+                interpreter.interpret(candidate, "x.pdf")
+        with self.assertRaises(SecurityViolation):
+            interpreter.interpret(candidate, "x.pdf")
+
+    def test_input_size_and_output_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pdf = root / "large.pdf"
+            pdf.write_bytes(b"%PDF" + b"x" * 20)
+            with self.assertRaises(SecurityViolation):
+                SecurityPolicy(max_pdf_bytes=10).validate_pdf(pdf)
+            with self.assertRaises(SecurityViolation):
+                safe_output_path(root.parent / "escape.xlsx", root, ".xlsx")
+            target = root / "real.pdf"; target.write_bytes(b"%PDF-x")
+            link = root / "linked.pdf"; link.symlink_to(target)
+            with self.assertRaises(SecurityViolation):
+                SecurityPolicy().validate_pdf(link)
+
+    def test_rejects_fake_pdf_unc_ads_and_unconfined_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fake = root / "fake.pdf"; fake.write_bytes(b"not-a-pdf")
+            with self.assertRaises(SecurityViolation):
+                SecurityPolicy().validate_pdf(fake)
+            for value in (r"\\server\share\x.pdf", "file.pdf:stream"):
+                with self.assertRaises(SecurityViolation):
+                    SecurityPolicy().validate_pdf(value)
+            valid = root / "valid.pdf"; make_pdf(valid)
+            with self.assertRaises(SecurityViolation):
+                process_pdf(valid, root / "out.xlsx")
+
+    def test_subprocess_output_is_bounded_during_execution(self):
+        policy = SecurityPolicy(max_process_output_bytes=1024)
+        with self.assertRaises(SecurityViolation):
+            run_command([sys.executable, "-c", "import os; os.write(1, b'x' * 1000000)"], policy=policy)
+
+    def test_fast_exit_output_is_checked_before_reading(self):
+        policy = SecurityPolicy(max_process_output_bytes=64)
+        with self.assertRaises(SecurityViolation):
+            run_command([sys.executable, "-c", "import os; os.write(1, b'x' * 4096)"], policy=policy)
+
+    def test_workspace_quota_is_enforced(self):
+        workspace = JobWorkspace(SecurityPolicy(max_temp_bytes=16, max_output_bytes=8, max_response_bytes=8))
+        with workspace as path:
+            (path / "overflow.bin").write_bytes(b"x" * 17)
+            with self.assertRaises(SecurityViolation):
+                workspace.check_quota()
+
+    def test_workspace_is_cleaned(self):
+        workspace = JobWorkspace()
+        with workspace as path:
+            (path / "temporary.txt").write_text("dato")
+            self.assertTrue(path.exists())
+        self.assertFalse(path.exists())
+
+    def test_subprocess_timeout_and_cancel(self):
+        import threading
+        cancelled = threading.Event(); cancelled.set()
+        with self.assertRaises(Exception):
+            run_command([sys.executable, "-c", "print('no')"], cancel=cancelled)
+        with self.assertRaises(TimeoutError):
+            run_command([sys.executable, "-c", "import time; time.sleep(2)"], timeout=1)
+
+    def test_running_subprocess_can_be_cancelled(self):
+        import threading, time
+        cancelled = threading.Event()
+        timer = threading.Timer(0.1, cancelled.set); timer.start()
+        started = time.monotonic()
+        with self.assertRaises(Exception):
+            run_command([sys.executable, "-c", "import time; time.sleep(5)"], cancel=cancelled)
+        timer.cancel()
+        self.assertLess(time.monotonic() - started, 2)
 
 
 if __name__ == "__main__":

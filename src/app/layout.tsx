@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   keywords: ["PDF", "extracción", "IA", "tablas", "catalogación", "datos", "análisis documental"],
   authors: [{ name: "Extractor PDF IA" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.svg",
   },
   openGraph: {
     title: "Extractor PDF + IA",

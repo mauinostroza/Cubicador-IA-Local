@@ -34,8 +34,7 @@ Sistema local para extracción y catalogación automática de datos en tablas de
 - **Poppler** instalado en el sistema (proporciona `pdftotext` y `pdfinfo`):
   - **Ubuntu/Debian:** `sudo apt install poppler-utils`
   - **macOS:** `brew install poppler`
-  - **Windows:** descargar desde [poppler-windows](https://github.com/oschwartz10612/poppler-windows) y agregar al PATH
-- **API Key de z.ai** configurada en `.z-ai-config` (puedes copiar el archivo `.z-ai-config.example`)
+  - **Windows:** el paquete portable incluirá Poppler en `vendor/poppler/bin`; no se carga desde `PATH`
 
 ## Instalación
 
@@ -44,8 +43,6 @@ Sistema local para extracción y catalogación automática de datos en tablas de
 bun install   # o: npm install
 
 # 2. Configurar credenciales de IA
-cp .z-ai-config.example .z-ai-config
-# Editar .z-ai-config con tu baseUrl y apiKey
 
 # 3. Verificar que pdftotext está disponible
 pdftotext -v
@@ -103,7 +100,7 @@ JSON estructurado  →  tabla editable en la UI
 - **Frontend**: Next.js 16 + TypeScript + Tailwind CSS 4 + shadcn/ui
 - **Backend**: API Route de Next.js (runtime Node.js)
 - **Extracción PDF**: `pdftotext` (Poppler) vía child_process
-- **IA**: `z-ai-web-dev-sdk` con prompt estructurado en español
+- **IA**: servidor local restringido a `127.0.0.1:8080`, sin proveedor externo
 - **Validación**: temperatura 0.1 para máxima precisión, parsing robusto de JSON
 
 ## Limitaciones conocidas
@@ -117,7 +114,6 @@ JSON estructurado  →  tabla editable en la UI
 - `src/app/api/extract/route.ts` — Lógica de extracción + prompt de IA
 - `src/app/page.tsx` — Interfaz principal
 - `src/components/extractor/*.tsx` — Componentes modulares
-- `.z-ai-config.example` — Plantilla de configuración
 - `package.json` — Dependencias y scripts
 
 ## Scripts disponibles

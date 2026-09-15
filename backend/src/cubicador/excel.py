@@ -8,7 +8,7 @@ from openpyxl.styles import Font, PatternFill
 from .models import ExtractionResult
 
 
-def export_excel(result: ExtractionResult, target: str | Path) -> Path:
+def export_excel(result: ExtractionResult, target: str | Path, max_bytes: int | None = None) -> Path:
     output = Path(target)
     output.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
@@ -44,6 +44,8 @@ def export_excel(result: ExtractionResult, target: str | Path) -> Path:
     os.close(fd)
     try:
         workbook.save(temporary)
+        if max_bytes is not None and os.path.getsize(temporary) > max_bytes:
+            raise ValueError("El Excel excede el tamaño permitido")
         os.replace(temporary, output)
     finally:
         if os.path.exists(temporary): os.unlink(temporary)
