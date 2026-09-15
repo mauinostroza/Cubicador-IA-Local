@@ -5,7 +5,22 @@
 > aprobarse `scripts/windows_job_smoke.py` y el workflow Windows. La validación
 > Windows fue aprobada en CI antes de habilitar Job Objects por defecto.
 
-Procesa únicamente PDF con capa de texto. No contiene OCR, visión, APIs externas ni cálculo geométrico.
+Procesa PDF con capa de texto y dispone de un contrato OCR local opcional. No contiene
+APIs externas ni cálculo geométrico.
+
+## OCR local opcional (P2)
+
+Cuando el PDF contiene poco texto y no aparece el título, `process_pdf(...,
+ocr_provider=...)` puede activar OCR. La etapa está cerrada por defecto: no descarga
+modelos ni usa red. Busca como máximo en 5 páginas a 150 DPI (16 MP por página),
+recorta una sola tabla y la renderiza a 300 DPI (12 MP) con `pdftoppm`
+empaquetado y solo acepta texto bajo `TABLA DE CUBICACIÓN` o `CUADRO DE
+CUBICACIÓN`. `PaddleOcrProvider` exige un runner y modelos preinstalados dentro de
+`vendor`; Qwen no está habilitado.
+
+Esta etapa deja preparada y probada la integración, pero no constituye una prueba
+end-to-end hasta empaquetar un runner PaddleOCR, sus modelos, el manifest firmado
+por hash confiable y la regla de Windows Firewall que bloquee su tráfico.
 
 ```bash
 cd backend
