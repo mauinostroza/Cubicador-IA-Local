@@ -30,7 +30,7 @@ class SecurityPolicy:
     max_audit_bytes: int = 1024 * 1024
     max_audit_total_bytes: int = 10 * 1024 * 1024
     max_audit_files: int = 100
-    windows_job_objects_enabled: bool = False
+    windows_job_objects_enabled: bool = True
     termination_grace_seconds: int = 5
 
     def __post_init__(self) -> None:
