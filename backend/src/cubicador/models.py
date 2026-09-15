@@ -8,6 +8,16 @@ class Evidence(BaseModel):
     line_start: int = Field(ge=1)
     line_end: int = Field(ge=1)
     text: str = Field(min_length=1)
+    bbox: tuple[int, int, int, int] | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    dpi: int | None = Field(default=None, ge=1)
+    crop_sha256: str | None = Field(default=None, pattern="^[0-9a-f]{64}$")
+    model_hashes: dict[str, str] = Field(default_factory=dict)
+    coordinate_frame: str | None = None
+    pdf_bbox_points: tuple[float, float, float, float] | None = None
+    engine: str | None = None
+    engine_version: str | None = None
+    model_version: str | None = None
 
 
 class QuantityValue(BaseModel):
@@ -16,6 +26,8 @@ class QuantityValue(BaseModel):
     numeric_value: float | None
     parse_status: str = Field(pattern="^(parsed|ambiguous|invalid)$")
     warning: str | None = None
+    bbox: tuple[int, int, int, int] | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class QuantityRow(BaseModel):
