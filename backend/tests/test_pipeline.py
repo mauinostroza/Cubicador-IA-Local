@@ -20,6 +20,13 @@ from cubicador.runtime import AuditStore, JobWorkspace, run_command, safe_output
 from cubicador.security import SecurityPolicy, SecurityViolation
 
 
+CONTROLLED_PDFTOTEXT = (
+    (Path(__file__).resolve().parents[2] / "vendor" / "poppler" / "bin" / "pdftotext.exe").is_file()
+    or Path("/usr/bin/pdftotext").is_file()
+    or Path("/usr/local/bin/pdftotext").is_file()
+)
+
+
 def make_pdf(path: Path) -> None:
     document = SimpleDocTemplate(str(path), pagesize=A4)
     data = [["Ítem", "Descripción", "Unidad", "Cantidad"], ["1.1", "Hormigón H30", "m3", "125,50"], ["1.2", "Acero A630-420H", "kg", "8.450,00"], ["1.3", "Moldaje de fundación", "m2", "310,25"]]
@@ -56,6 +63,7 @@ class LocatorTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.TestCase):
+    @unittest.skipUnless(CONTROLLED_PDFTOTEXT, "Poppler controlado no está empaquetado en este runner")
     def test_pdf_to_json_and_excel(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -89,6 +97,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual([q.column for q in result.filas[0].quantities], ["m3", "kg"])
         self.assertEqual([q.numeric_value for q in result.filas[0].quantities], [12.5, 450.0])
 
+    @unittest.skipUnless(CONTROLLED_PDFTOTEXT, "Poppler controlado no está empaquetado en este runner")
     def test_absent_table(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "none.pdf"
@@ -96,6 +105,7 @@ class PipelineTests(unittest.TestCase):
             result = process_pdf(path)
             self.assertFalse(result.tabla_encontrada)
 
+    @unittest.skipUnless(CONTROLLED_PDFTOTEXT, "Poppler controlado no está empaquetado en este runner")
     def test_warns_when_visible_text_may_be_cad_geometry(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "cad.pdf"
@@ -105,6 +115,7 @@ class PipelineTests(unittest.TestCase):
             self.assertTrue(result.requiere_revision)
             self.assertTrue(any("geometría CAD" in warning for warning in result.advertencias))
 
+    @unittest.skipUnless(CONTROLLED_PDFTOTEXT, "Poppler controlado no está empaquetado en este runner")
     def test_cli_writes_json(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -190,12 +201,12 @@ class SecurityTests(unittest.TestCase):
                 process_pdf(valid, root / "out.xlsx")
 
     def test_subprocess_output_is_bounded_during_execution(self):
-        policy = SecurityPolicy(max_process_output_bytes=1024)
+        policy = SecurityPolicy(max_process_output_bytes=1024, windows_job_objects_enabled=sys.platform == "win32")
         with self.assertRaises(SecurityViolation):
             run_command([sys.executable, "-c", "import os; os.write(1, b'x' * 1000000)"], policy=policy, workspace=self.runtime_workspace)
 
     def test_fast_exit_output_is_checked_before_reading(self):
-        policy = SecurityPolicy(max_process_output_bytes=64)
+        policy = SecurityPolicy(max_process_output_bytes=64, windows_job_objects_enabled=sys.platform == "win32")
         with self.assertRaises(SecurityViolation):
             run_command([sys.executable, "-c", "import os; os.write(1, b'x' * 4096)"], policy=policy, workspace=self.runtime_workspace)
 
@@ -266,7 +277,8 @@ class SecurityTests(unittest.TestCase):
         with self.assertRaises(Exception):
             run_command([sys.executable, "-c", "print('no')"], cancel=cancelled, workspace=self.runtime_workspace)
         with self.assertRaises(TimeoutError):
-            run_command([sys.executable, "-c", "import time; time.sleep(2)"], timeout=1, workspace=self.runtime_workspace)
+            run_command([sys.executable, "-c", "import time; time.sleep(2)"], timeout=1, workspace=self.runtime_workspace,
+                policy=SecurityPolicy(windows_job_objects_enabled=sys.platform == "win32"))
 
     def test_running_subprocess_can_be_cancelled(self):
         import threading, time
@@ -274,7 +286,8 @@ class SecurityTests(unittest.TestCase):
         timer = threading.Timer(0.1, cancelled.set); timer.start()
         started = time.monotonic()
         with self.assertRaises(Exception):
-            run_command([sys.executable, "-c", "import time; time.sleep(5)"], cancel=cancelled, workspace=self.runtime_workspace)
+            run_command([sys.executable, "-c", "import time; time.sleep(5)"], cancel=cancelled, workspace=self.runtime_workspace,
+                policy=SecurityPolicy(windows_job_objects_enabled=sys.platform == "win32"))
         timer.cancel()
         self.assertLess(time.monotonic() - started, 2)
 
