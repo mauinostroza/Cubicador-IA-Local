@@ -22,6 +22,14 @@ class SecurityPolicy:
     max_concurrent_jobs: int = 1
     max_queued_jobs: int = 2
     max_pages: int = 200
+    max_ocr_pages: int = 5
+    ocr_search_dpi: int = 150
+    ocr_detail_dpi: int = 300
+    max_ocr_search_pixels: int = 16_000_000
+    max_ocr_detail_pixels: int = 12_000_000
+    max_ocr_total_pixels: int = 92_000_000
+    max_ocr_calls: int = 6
+    max_ocr_image_bytes: int = 80 * 1024 * 1024
     allowed_model_ports: tuple[int, ...] = (8080,)
     windows_job_memory_bytes: int = 2 * 1024 * 1024 * 1024
     windows_process_memory_bytes: int = 1536 * 1024 * 1024
@@ -39,6 +47,10 @@ class SecurityPolicy:
             self.max_response_bytes, self.max_process_output_bytes,
             self.subprocess_timeout_seconds, self.model_timeout_seconds,
             self.max_concurrent_jobs, self.max_pages,
+            self.max_ocr_pages, self.ocr_search_dpi, self.ocr_detail_dpi,
+            self.max_ocr_search_pixels, self.max_ocr_detail_pixels,
+            self.max_ocr_total_pixels, self.max_ocr_calls,
+            self.max_ocr_image_bytes,
             self.windows_job_memory_bytes, self.windows_process_memory_bytes,
             self.windows_active_process_limit, self.windows_cpu_rate_percent,
             self.max_audit_bytes,
@@ -57,6 +69,10 @@ class SecurityPolicy:
             raise ValueError("El límite de CPU debe estar entre 1 y 100")
         if self.max_audit_bytes > self.max_audit_total_bytes:
             raise ValueError("La cuota de un log no puede superar la cuota global")
+        if self.max_ocr_calls < self.max_ocr_pages + 1:
+            raise ValueError("OCR requiere presupuesto para búsqueda más un detalle")
+        if self.max_ocr_total_pixels < self.max_ocr_pages * self.max_ocr_search_pixels + self.max_ocr_detail_pixels:
+            raise ValueError("El presupuesto total OCR es incoherente")
 
     def validate_pdf(self, value: str | Path) -> Path:
         _reject_unsafe_path_text(value)
