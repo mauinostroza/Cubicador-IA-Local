@@ -24,6 +24,14 @@ def make_pdf(path: Path) -> None:
 
 
 class LocatorTests(unittest.TestCase):
+    def test_accepts_cubicacion_title_aliases(self):
+        for title in ("TABLA DE CUBICACIÓN", "CUADRO DE CUBICACION"):
+            with self.subTest(title=title):
+                text = PdfText((f"{title}\nÍtem  Descripción  Unidad  Cantidad\n1  Hormigón  m3  12,5",))
+                candidate = locate_summary_table(text)
+                self.assertIsNotNone(candidate)
+                self.assertEqual(candidate.title, title)
+
     def test_prefers_summary_table(self):
         text = PdfText(("OTRA TABLA\nItem  Cantidad\n1  2\nRESUMEN DE CANTIDADES\nÍtem  Descripción  Unidad  Cantidad\n1  Hormigón  m3  12,5",))
         candidate = locate_summary_table(text)
@@ -77,6 +85,15 @@ class PipelineTests(unittest.TestCase):
             SimpleDocTemplate(str(path)).build([Paragraph("Plano sin tabla", None)])
             result = process_pdf(path)
             self.assertFalse(result.tabla_encontrada)
+
+    def test_warns_when_visible_text_may_be_cad_geometry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cad.pdf"
+            SimpleDocTemplate(str(path)).build([Paragraph("ESCALA FECHA REV.", None)])
+            result = process_pdf(path)
+            self.assertFalse(result.tabla_encontrada)
+            self.assertTrue(result.requiere_revision)
+            self.assertTrue(any("geometría CAD" in warning for warning in result.advertencias))
 
     def test_cli_writes_json(self):
         with tempfile.TemporaryDirectory() as directory:
