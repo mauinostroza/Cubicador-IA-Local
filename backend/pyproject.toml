@@ -9,9 +9,11 @@ description = "Extractor offline de tablas resumen de cantidades desde PDF con t
 requires-python = ">=3.10"
 dependencies = ["openpyxl>=3.1,<4", "pydantic>=2.6,<3"]
 
+[project.optional-dependencies]
+test = ["reportlab>=4,<5"]
+
 [project.scripts]
 cubicador = "cubicador.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
