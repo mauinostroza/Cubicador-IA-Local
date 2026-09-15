@@ -8,12 +8,16 @@ on:
       - "backend/src/cubicador/runtime.py"
       - "backend/src/cubicador/security.py"
       - "backend/scripts/windows_job_smoke.py"
+      - "backend/tests/**"
+      - "backend/pyproject.toml"
       - ".github/workflows/windows-job-object.yml"
   pull_request:
     paths:
       - "backend/src/cubicador/runtime.py"
       - "backend/src/cubicador/security.py"
       - "backend/scripts/windows_job_smoke.py"
+      - "backend/tests/**"
+      - "backend/pyproject.toml"
       - ".github/workflows/windows-job-object.yml"
 
 jobs:
