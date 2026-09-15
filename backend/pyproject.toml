@@ -7,7 +7,7 @@ name = "cubicador-ia-local"
 version = "0.1.0"
 description = "Extractor offline de tablas resumen de cantidades desde PDF con texto"
 requires-python = ">=3.10"
-dependencies = ["openpyxl>=3.1,<4", "pydantic>=2.6,<3"]
+dependencies = ["openpyxl>=3.1,<4", "pydantic>=2.6,<3", "Pillow>=10,<13"]
 
 [project.optional-dependencies]
 test = ["reportlab>=4,<5"]
