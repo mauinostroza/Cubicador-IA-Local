@@ -2,8 +2,8 @@
 
 > En Windows, los subprocesos se crean suspendidos, se asignan a un Job Object
 > con límites y recién entonces se reanudan. Antes de distribuir el EXE debe
-> aprobarse `scripts/windows_job_smoke.py` y el workflow Windows. El feature gate
-> permanece desactivado por defecto y solo el smoke lo habilita explícitamente.
+> aprobarse `scripts/windows_job_smoke.py` y el workflow Windows. La validación
+> Windows fue aprobada en CI antes de habilitar Job Objects por defecto.
 
 Procesa únicamente PDF con capa de texto. No contiene OCR, visión, APIs externas ni cálculo geométrico.
 
