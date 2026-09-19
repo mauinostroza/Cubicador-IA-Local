@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import threading
 from .security import DEFAULT_SECURITY_POLICY, SecurityPolicy
 from .runtime import AuditLog, run_command
 from .toolchain import ToolchainError, resolve_poppler_for_launch
@@ -16,12 +17,12 @@ class NoTextPdfError(PdfTextError):
 
 
 def get_page_count(pdf_path: str | Path, policy: SecurityPolicy, workspace: Path,
-                   audit: AuditLog | None = None) -> int:
+                   audit: AuditLog | None = None, cancel: threading.Event | None = None) -> int:
     path = policy.validate_pdf(pdf_path)
     try: executable, verifier = resolve_poppler_for_launch("pdfinfo", developer_mode=policy.developer_tools_enabled)
     except (ToolchainError, FileNotFoundError):
         raise PdfTextError("No se encontró pdfinfo en la ubicación controlada de Poppler")
-    completed = run_command([str(executable), str(path)], policy=policy, workspace=workspace, audit=audit,
+    completed = run_command([str(executable), str(path)], policy=policy, workspace=workspace, audit=audit, cancel=cancel,
                              launch_verifier=verifier)
     if completed.returncode != 0:
         raise PdfTextError("pdfinfo no pudo inspeccionar el PDF")
@@ -46,7 +47,7 @@ class PdfText:
         return self.raw or "\f".join(self.pages)
 
 
-def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy, workspace: Path, audit: AuditLog | None = None) -> PdfText:
+def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy, workspace: Path, audit: AuditLog | None = None, cancel: threading.Event | None = None) -> PdfText:
     try:
         path = policy.validate_pdf(pdf_path)
     except (ValueError, OSError) as exc:
@@ -56,7 +57,7 @@ def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy, workspace:
         raise PdfTextError("No se encontró pdftotext en la ubicación controlada de Poppler")
     completed = run_command(
         [str(executable_path), "-layout", "-enc", "UTF-8", str(path), "-"],
-        policy=policy, workspace=workspace, audit=audit, launch_verifier=verifier,
+        policy=policy, workspace=workspace, audit=audit, cancel=cancel, launch_verifier=verifier,
     )
     if completed.returncode != 0:
         raise PdfTextError(completed.stderr.decode("utf-8", "replace").strip() or "pdftotext falló")

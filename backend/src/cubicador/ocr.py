@@ -8,6 +8,7 @@ import json
 import os
 import re
 import struct
+import threading
 
 from .pdf_text import PdfText
 from .runtime import AuditLog, run_command
@@ -40,7 +41,7 @@ class OcrProvider(Protocol):
     """Contrato mínimo: imagen local de entrada, líneas y coordenadas de salida."""
 
     def recognize(self, image_path: Path, *, policy: SecurityPolicy, workspace: Path,
-                  audit: AuditLog | None = None) -> OcrPage: ...
+                  audit: AuditLog | None = None, cancel: threading.Event | None = None) -> OcrPage: ...
 
 
 def _tool(name: str, policy: SecurityPolicy) -> tuple[Path, Callable[[], Path]] | None:
@@ -49,7 +50,7 @@ def _tool(name: str, policy: SecurityPolicy) -> tuple[Path, Callable[[], Path]] 
 
 
 def render_pages(pdf_path: Path, page_count: int, policy: SecurityPolicy, workspace: Path,
-                 audit: AuditLog | None = None) -> tuple[Path, ...]:
+                 audit: AuditLog | None = None, cancel: threading.Event | None = None) -> tuple[Path, ...]:
     """Renderiza un número acotado de páginas; nunca llama herramientas del PATH."""
     if page_count > policy.max_ocr_pages:
         raise OcrError(f"OCR rechazado: el PDF supera {policy.max_ocr_pages} páginas")
@@ -61,7 +62,7 @@ def render_pages(pdf_path: Path, page_count: int, policy: SecurityPolicy, worksp
     completed = run_command([
         str(executable), "-png", "-r", str(policy.ocr_search_dpi), "-scale-to", "4000", "-f", "1", "-l", str(page_count),
         "-singlefile" if page_count == 1 else "-forcenum", str(pdf_path), str(prefix),
-        ], policy=policy, workspace=workspace, audit=audit, launch_verifier=verifier)
+        ], policy=policy, workspace=workspace, audit=audit, cancel=cancel, launch_verifier=verifier)
     if completed.returncode != 0:
         raise OcrError(completed.stderr.decode("utf-8", "replace").strip() or "pdftoppm falló")
     images = tuple(sorted(workspace.glob("ocr-page*.png")))
@@ -91,19 +92,20 @@ def _png_size(path: Path) -> tuple[int, int]:
 
 
 def _render_crop(pdf_path: Path, page_number: int, box: tuple[int, int, int, int], search_size: tuple[int, int],
-                 policy: SecurityPolicy, workspace: Path, audit: AuditLog | None) -> Path:
+                 policy: SecurityPolicy, workspace: Path, audit: AuditLog | None,
+                 cancel: threading.Event | None = None) -> Path:
     resolved = _tool("pdftoppm", policy)
     if resolved is None:
         raise OcrError("No se encontró pdftoppm en la ubicación controlada de Poppler")
     executable, verifier = resolved
-    points_w, points_h = _page_size_points(pdf_path, page_number, policy, workspace, audit)
+    points_w, points_h = _page_size_points(pdf_path, page_number, policy, workspace, audit, cancel)
     x, y, width, height = _transform_box(box, search_size, (points_w, points_h), policy.ocr_detail_dpi)
     prefix = ensure_within(workspace / f"ocr-table-{page_number}", workspace)
     completed = run_command([str(executable), "-png", "-r", str(policy.ocr_detail_dpi),
                              "-f", str(page_number), "-l", str(page_number), "-singlefile",
                              "-x", str(x), "-y", str(y), "-W", str(width), "-H", str(height),
                              str(pdf_path), str(prefix)], policy=policy, workspace=workspace, audit=audit,
-                             launch_verifier=verifier)
+                             launch_verifier=verifier, cancel=cancel)
     output = prefix.with_suffix(".png")
     if completed.returncode != 0 or _reparse(output) or not output.is_file():
         raise OcrError("No se pudo renderizar el recorte de la tabla")
@@ -122,13 +124,13 @@ def _transform_box(box: tuple[int, int, int, int], search_size: tuple[int, int],
 
 
 def _page_size_points(pdf_path: Path, page_number: int, policy: SecurityPolicy, workspace: Path,
-                      audit: AuditLog | None) -> tuple[float, float]:
+                      audit: AuditLog | None, cancel: threading.Event | None = None) -> tuple[float, float]:
     resolved = _tool("pdfinfo", policy)
     if resolved is None:
         raise OcrError("No se encontró pdfinfo en la ubicación controlada de Poppler")
     executable, verifier = resolved
     completed = run_command([str(executable), "-f", str(page_number), "-l", str(page_number), str(pdf_path)],
-                            policy=policy, workspace=workspace, audit=audit, launch_verifier=verifier)
+                            policy=policy, workspace=workspace, audit=audit, cancel=cancel, launch_verifier=verifier)
     match = re.search(rb"(?m)^Page(?:\s+\d+)? size:\s*([0-9.]+)\s+x\s+([0-9.]+)\s+pts", completed.stdout)
     if completed.returncode != 0 or not match:
         raise OcrError("pdfinfo no informó dimensiones de página válidas")
@@ -139,19 +141,22 @@ _TITLE = re.compile(r"(?:tabla|cuadro)\s+de\s+cubicaci[oó]n", re.IGNORECASE)
 
 
 def ocr_document(pdf_path: Path, page_count: int, provider: OcrProvider, policy: SecurityPolicy,
-                 workspace: Path, audit: AuditLog | None = None) -> PdfText:
+                 workspace: Path, audit: AuditLog | None = None,
+                 cancel: threading.Event | None = None) -> PdfText:
     """OCR fail-closed: solo conserva páginas donde se identifica el título esperado."""
-    images = render_pages(pdf_path, page_count, policy, workspace, audit)
+    images = render_pages(pdf_path, page_count, policy, workspace, audit, cancel)
     pages: list[str] = []
     found = False
     calls = 0
     total_pixels = 0
     evidence: dict[int, dict] = {}
     for page_number, image in enumerate(images, 1):
+        if cancel and cancel.is_set():
+            raise OcrError("Trabajo cancelado")
         if calls >= policy.max_ocr_pages:
             raise SecurityViolation("Presupuesto de llamadas OCR de búsqueda excedido")
         width, height = _png_size(image); total_pixels += width * height; calls += 1
-        page = provider.recognize(image, policy=policy, workspace=workspace, audit=audit)
+        page = provider.recognize(image, policy=policy, workspace=workspace, audit=audit, cancel=cancel)
         _validate_page(page, policy.max_ocr_search_pixels)
         ordered = sorted(page.lines, key=lambda line: (line.y0, line.x0))
         title_rows = [line for line in ordered if _TITLE.search(" ".join(line.text.split()))]
@@ -163,18 +168,18 @@ def ocr_document(pdf_path: Path, page_count: int, provider: OcrProvider, policy:
         crop_box = _grid_table_bounds(image, title, page)
         if crop_box is None:
             raise OcrError("No se confirmó el contorno raster de la tabla; requiere revisión")
-        points_w, points_h = _page_size_points(pdf_path, page_number, policy, workspace, audit)
+        points_w, points_h = _page_size_points(pdf_path, page_number, policy, workspace, audit, cancel)
         predicted_detail = round(crop_box[2] * points_w * policy.ocr_detail_dpi / 72 / page.width) * round(crop_box[3] * points_h * policy.ocr_detail_dpi / 72 / page.height)
         if predicted_detail > policy.max_ocr_detail_pixels:
             raise SecurityViolation("Recorte detallado excedería el presupuesto de píxeles")
         crop = _render_crop(pdf_path, page_number, crop_box, (page.width, page.height),
-                            policy, workspace, audit)
+                            policy, workspace, audit, cancel)
         if calls >= policy.max_ocr_calls:
             raise SecurityViolation("Presupuesto total de llamadas OCR excedido")
         cw, ch = _png_size(crop); total_pixels += cw * ch; calls += 1
         if total_pixels > policy.max_ocr_total_pixels:
             raise SecurityViolation("Presupuesto total de píxeles OCR excedido")
-        cropped_page = provider.recognize(crop, policy=policy, workspace=workspace, audit=audit)
+        cropped_page = provider.recognize(crop, policy=policy, workspace=workspace, audit=audit, cancel=cancel)
         _validate_page(cropped_page, policy.max_ocr_detail_pixels)
         selected = sorted((line for line in cropped_page.lines if line.confidence >= 0.35),
                           key=lambda line: (line.y0, line.x0))
@@ -326,7 +331,7 @@ class PaddleOcrProvider:
         self.model_hashes = {"toolchain_manifest": self.toolchain.trusted_manifest_sha256}
 
     def recognize(self, image_path: Path, *, policy: SecurityPolicy, workspace: Path,
-                  audit: AuditLog | None = None) -> OcrPage:
+                  audit: AuditLog | None = None, cancel: threading.Event | None = None) -> OcrPage:
         # Revalida inventario completo y prepara una segunda atestación que
         # run_command ejecuta justo antes de Popen/CreateProcessW. Esto cubre
         # runner, DLL/runtime y todos los modelos del inventario.
@@ -338,7 +343,7 @@ class PaddleOcrProvider:
         completed = run_command([str(self.runner), "--offline", "--models", str(self.model_root),
                                  "--input", str(image), "--output", str(output)],
                                 policy=policy, workspace=workspace, audit=audit,
-                                launch_verifier=verifier)
+                                launch_verifier=verifier, cancel=cancel)
         if completed.returncode != 0 or _reparse(output) or not output.is_file():
             raise OcrError("PaddleOCR local falló o no generó salida")
         if output.stat().st_size > policy.max_response_bytes:

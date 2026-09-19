@@ -8,7 +8,7 @@ import { FileText, Upload, X, FileUp, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface FileUploaderProps {
-  onFileSelected: (file: File | null, base64: string | null) => void;
+  onFileSelected: (file: File | null) => void;
   disabled?: boolean;
 }
 
@@ -38,15 +38,9 @@ export function FileUploader({ onFileSelected, disabled }: FileUploaderProps) {
       }
       setSelectedFile(file);
       setFileSize(formatBytes(file.size));
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        onFileSelected(file, result);
-      };
-      reader.onerror = () => {
-        setError('No se pudo leer el archivo. Intente nuevamente.');
-      };
-      reader.readAsDataURL(file);
+      // Keep the File object and upload it as multipart only when the user
+      // starts the job; this avoids duplicating a 50 MB PDF as base64 in RAM.
+      onFileSelected(file);
     },
     [onFileSelected]
   );
@@ -89,7 +83,7 @@ export function FileUploader({ onFileSelected, disabled }: FileUploaderProps) {
     setSelectedFile(null);
     setFileSize('');
     setError(null);
-    onFileSelected(null, null);
+    onFileSelected(null);
     if (inputRef.current) inputRef.current.value = '';
   }, [onFileSelected]);
 

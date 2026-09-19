@@ -1,0 +1,35 @@
+name: Frontend local UI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "package.json"
+      - "next.config.ts"
+      - "tsconfig.json"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "package.json"
+      - "next.config.ts"
+      - "tsconfig.json"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run build
+        env:
+          CUBICADOR_BACKEND_TOKEN: ci-placeholder-token-with-32-chars

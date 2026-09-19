@@ -14,6 +14,7 @@ test = ["reportlab>=4,<5"]
 
 [project.scripts]
 cubicador = "cubicador.cli:main"
+cubicador-local-api = "cubicador.http:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

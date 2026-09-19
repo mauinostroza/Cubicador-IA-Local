@@ -49,4 +49,21 @@ Pruebas (el PDF se genera en un directorio temporal):
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-El adaptador `llama-server` es experimental y todavía no ha sido validado con un modelo concreto. FastAPI, SQLite y el empaquetado del modelo y del EXE quedan pendientes de las siguientes etapas.
+## Interfaz local
+
+La interfaz web usa una API Python mínima que solo escucha en `127.0.0.1`, exige
+un token efímero, acepta únicamente PDF multipart acotado y mantiene una cola de
+un trabajo con cancelación y retención limitada. No expone rutas locales ni URLs.
+
+```bash
+export CUBICADOR_API_TOKEN="un-token-aleatorio-de-al-menos-32-caracteres"
+cubicador-local-api --root ./trabajos-locales
+```
+
+La aplicación Next debe iniciarse con el mismo valor en
+`CUBICADOR_BACKEND_TOKEN`; su proxy rechaza cualquier backend que no sea
+`127.0.0.1`.
+
+El adaptador `llama-server` es experimental y no se utiliza desde esta interfaz.
+Qwen3-VL y el EXE final permanecerán desactivados hasta validar el payload OCR
+real, la firma, las ACL, el firewall y las pruebas Windows de release.

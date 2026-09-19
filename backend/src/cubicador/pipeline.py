@@ -1,5 +1,6 @@
 from pathlib import Path
 import hashlib
+import threading
 
 from .adapters import HeuristicInterpreter, TableInterpreter
 from .excel import export_excel
@@ -23,7 +24,7 @@ def _match_quantity_cell(quantity_text: str, cells: list[dict]) -> dict | None:
     return exact[0] if len(exact) == 1 else None
 
 
-def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, interpreter: TableInterpreter | None = None, text_path: str | Path | None = None, *, output_root: str | Path | None = None, policy: SecurityPolicy = DEFAULT_SECURITY_POLICY, ocr_provider: OcrProvider | None = None) -> ExtractionResult:
+def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, interpreter: TableInterpreter | None = None, text_path: str | Path | None = None, *, output_root: str | Path | None = None, policy: SecurityPolicy = DEFAULT_SECURITY_POLICY, ocr_provider: OcrProvider | None = None, cancel: threading.Event | None = None) -> ExtractionResult:
     path = policy.validate_pdf(pdf_path)
     if (excel_path is not None or text_path is not None) and output_root is None:
         raise SecurityViolation("output_root es obligatorio para cualquier escritura")
@@ -36,7 +37,7 @@ def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, inte
     job_workspace = JobWorkspace(policy)
     try:
         with gate, job_workspace as workspace:
-            result = _process_pdf(path, excel_target, interpreter, text_target, policy, workspace, audit, ocr_provider)
+            result = _process_pdf(path, excel_target, interpreter, text_target, policy, workspace, audit, ocr_provider, cancel)
             job_workspace.check_quota()
         if audit:
             audit.append("job_completed", "ok")
@@ -47,14 +48,14 @@ def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, inte
         raise
 
 
-def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpreter | None, text_path: Path | None, policy: SecurityPolicy, workspace: Path, audit=None, ocr_provider: OcrProvider | None = None) -> ExtractionResult:
+def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpreter | None, text_path: Path | None, policy: SecurityPolicy, workspace: Path, audit=None, ocr_provider: OcrProvider | None = None, cancel: threading.Event | None = None) -> ExtractionResult:
     try:
-        document = extract_layout_text(path, policy, workspace, audit)
+        document = extract_layout_text(path, policy, workspace, audit, cancel)
         page_count = len(document.pages)
     except NoTextPdfError:
         if ocr_provider is None:
             raise
-        page_count = get_page_count(path, policy, workspace, audit)
+        page_count = get_page_count(path, policy, workspace, audit, cancel)
         document = PdfText(tuple("" for _ in range(page_count)))
     hasher = hashlib.sha256()
     with path.open("rb") as source:
@@ -68,7 +69,7 @@ def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpre
         try:
             if audit:
                 audit.append("ocr_started", "ok", bytes=path.stat().st_size)
-            document = ocr_document(path, page_count, ocr_provider, policy, workspace, audit)
+            document = ocr_document(path, page_count, ocr_provider, policy, workspace, audit, cancel)
             candidates = locate_summary_tables(document)
             extraction_method = "ocr-local"
             extracted_characters = sum(len("".join(page.split())) for page in document.pages)
