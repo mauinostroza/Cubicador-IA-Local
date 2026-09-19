@@ -469,8 +469,11 @@ def main() -> int:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--root", default="./.cubicador-api")
+    parser.add_argument("--cpu-profile", choices=("i3", "i5"), default="i3")
     args = parser.parse_args()
-    server = create_server(args.host, args.port, root=args.root)
+    from .security import intel_8gb_policy
+    server = create_server(args.host, args.port, root=args.root,
+                           policy=intel_8gb_policy(args.cpu_profile))
     print(f"Cubicador API local escuchando en http://127.0.0.1:{args.port}", flush=True)
     try:
         server.serve_forever()

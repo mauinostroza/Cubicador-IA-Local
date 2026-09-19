@@ -6,6 +6,7 @@ import threading
 from .security import DEFAULT_SECURITY_POLICY, SecurityPolicy
 from .runtime import AuditLog, run_command
 from .toolchain import ToolchainError, resolve_poppler_for_launch
+from .pdf_backend import PdfBackendError, PdfiumBackend
 
 
 class PdfTextError(RuntimeError):
@@ -41,13 +42,17 @@ class PdfText:
     pages: tuple[str, ...]
     raw: str = ""
     ocr_evidence: dict[int, dict] | None = None
+    # Geometría opcional del backend PDFium; Poppler legacy deja este campo
+    # vacío para conservar compatibilidad con el extractor textual existente.
+    layout: tuple[tuple[object, ...], ...] = ()
 
     @property
     def full_text(self) -> str:
         return self.raw or "\f".join(self.pages)
 
 
-def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy, workspace: Path, audit: AuditLog | None = None, cancel: threading.Event | None = None) -> PdfText:
+def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy, workspace: Path,
+                        audit: AuditLog | None = None, cancel: threading.Event | None = None) -> PdfText:
     try:
         path = policy.validate_pdf(pdf_path)
     except (ValueError, OSError) as exc:
@@ -73,3 +78,27 @@ def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy, workspace:
     if not any(page.strip() for page in pages):
         raise NoTextPdfError("El PDF no contiene texto legible")
     return PdfText(pages=pages, raw=stdout)
+
+
+def extract_layout_text_pdfium(pdf_path: str | Path, policy: SecurityPolicy) -> PdfText:
+    """Entry point explícito de evaluación, cerrado hasta que exista worker.
+
+    No es invocado por ``process_pdf`` ni por la API. Separarlo evita que una
+    inyección accidental del backend active PDFium en el proceso multihilo.
+    """
+    if not policy.pdfium_enabled or not policy.pdfium_worker_enabled:
+        raise PdfTextError("PDFium está desactivado o fuera del worker autorizado")
+    try:
+        backend = PdfiumBackend.from_policy(policy)
+        path = policy.validate_pdf(pdf_path)
+        count = backend.page_count(path, policy=policy)
+        extracted = tuple(backend.extract_page(path, page, policy=policy) for page in range(1, count + 1))
+        pages = tuple(page.text for page in extracted)
+        if not any(page.strip() for page in pages):
+            raise NoTextPdfError("El PDF no contiene texto legible")
+        return PdfText(pages=pages, raw="\f".join(pages),
+                       layout=tuple(tuple(page.lines) for page in extracted))
+    except NoTextPdfError:
+        raise
+    except (PdfBackendError, ValueError, OSError) as exc:
+        raise PdfTextError(str(exc)) from exc

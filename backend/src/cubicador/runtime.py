@@ -209,7 +209,8 @@ def run_command(
         launch_path = str(Path(argv[0]).resolve().parent) if launch_verifier is not None else os.defpath
         process = subprocess.Popen(
             argv, stdin=subprocess.DEVNULL, stdout=stdout_file, stderr=stderr_file,
-            shell=False, start_new_session=True, cwd=workdir, env={"PATH": launch_path, "LANG": "C.UTF-8"},
+            shell=False, start_new_session=True, cwd=workdir,
+            env=_worker_environment(launch_path, policy),
         )
         deadline = time.monotonic() + (timeout or policy.subprocess_timeout_seconds)
         failure: Exception | None = None
@@ -258,6 +259,25 @@ def _verify_launch_target(argv: list[str], verifier: Callable[[], Path | None] |
 
 def _is_windows() -> bool:
     return os.name == "nt"
+
+
+def _worker_environment(path: str, policy: SecurityPolicy) -> dict[str, str]:
+    """Entorno mínimo y determinista para Poppler/Paddle.
+
+    Las variables de hilos son límites defensivos para runtimes BLAS/Paddle;
+    no se hereda el entorno del usuario, evitando que PATH, proxies o ajustes
+    externos habiliten red, plugins o más paralelismo.
+    """
+    threads = str(policy.model_threads)
+    return {
+        "PATH": path,
+        "LANG": "C.UTF-8",
+        "OMP_NUM_THREADS": threads,
+        "MKL_NUM_THREADS": threads,
+        "OPENBLAS_NUM_THREADS": threads,
+        "PADDLE_NUM_THREADS": threads,
+        "CPU_NUM_THREADS": threads,
+    }
 
 
 def _run_windows_job(argv: list[str], policy: SecurityPolicy, timeout: int, cancel: threading.Event | None, workspace: Path,
@@ -401,6 +421,11 @@ def _run_windows_job(argv: list[str], policy: SecurityPolicy, timeout: int, canc
                 "PATH": str(Path(argv[0]).resolve(strict=True).parent) if launch_verifier is not None else os.defpath,
                 "SYSTEMROOT": os.environ.get("SystemRoot", r"C:\Windows"),
                 "WINDIR": os.environ.get("SystemRoot", r"C:\Windows"),
+                "OMP_NUM_THREADS": str(policy.model_threads),
+                "MKL_NUM_THREADS": str(policy.model_threads),
+                "OPENBLAS_NUM_THREADS": str(policy.model_threads),
+                "PADDLE_NUM_THREADS": str(policy.model_threads),
+                "CPU_NUM_THREADS": str(policy.model_threads),
             }
             environment = ctypes.create_unicode_buffer("\0".join(f"{key}={value}" for key, value in sorted(safe_environment.items())) + "\0\0")
             with _WINDOWS_CREATE_LOCK:

@@ -15,12 +15,14 @@ def main() -> int:
     parser.add_argument("--text", help="Guarda el texto layout bruto sin truncar")
     parser.add_argument("--mode", choices=("heuristic", "llama-server"), default="heuristic")
     parser.add_argument("--ocr", action="store_true", help="Activa únicamente el bundle OCR fijado en esta versión")
+    parser.add_argument("--cpu-profile", choices=("i3", "i5"), default="i3",
+                        help="Perfil CPU para equipos Windows con 8 GB")
     parser.add_argument("--developer-tools", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     output_root = Path(args.output_dir).resolve(strict=True)
     adapter = HeuristicInterpreter() if args.mode == "heuristic" else LlamaServerInterpreter()
-    from .security import SecurityPolicy
-    policy = SecurityPolicy(developer_tools_enabled=args.developer_tools)
+    from .security import intel_8gb_policy
+    policy = intel_8gb_policy(args.cpu_profile, developer_tools_enabled=args.developer_tools)
     ocr_provider = None
     if args.ocr:
         from .ocr import PaddleOcrProvider

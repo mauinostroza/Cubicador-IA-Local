@@ -41,6 +41,17 @@ class SecurityPolicy:
     windows_job_objects_enabled: bool = True
     termination_grace_seconds: int = 5
     developer_tools_enabled: bool = False
+    # PDFium/pypdfium2 permanece en modo de evaluación: no se invoca desde el
+    # pipeline/API hasta que exista un worker aislado y un release firmado.
+    pdfium_enabled: bool = False
+    # Solo un worker supervisado puede abrir PDFium. El valor se mantiene falso
+    # en el runtime/API y se habilitará únicamente dentro del worker firmado.
+    pdfium_worker_enabled: bool = False
+    # Perfil de ejecución CPU para equipos Windows 10/11 con 8 GB de RAM.
+    # El runner OCR recibe estos valores mediante un entorno mínimo y no puede
+    # heredar la configuración del usuario ni crear trabajos concurrentes.
+    cpu_profile: str = "intel-i3-8gb"
+    model_threads: int = 2
 
     def __post_init__(self) -> None:
         positive = (
@@ -57,6 +68,7 @@ class SecurityPolicy:
             self.max_audit_bytes,
             self.max_audit_total_bytes, self.max_audit_files,
             self.termination_grace_seconds,
+            self.model_threads,
         )
         if any(value <= 0 for value in positive) or self.max_queued_jobs < 0:
             raise ValueError("Todos los límites deben ser positivos y la cola no negativa")
@@ -70,6 +82,11 @@ class SecurityPolicy:
             raise ValueError("El límite de CPU debe estar entre 1 y 100")
         if self.max_audit_bytes > self.max_audit_total_bytes:
             raise ValueError("La cuota de un log no puede superar la cuota global")
+        if self.cpu_profile not in {"intel-i3-8gb", "intel-i5-8gb"}:
+            raise ValueError("Perfil CPU no soportado")
+        expected_threads = 4 if self.cpu_profile == "intel-i5-8gb" else 2
+        if self.model_threads > expected_threads:
+            raise ValueError("Los hilos del modelo superan el perfil CPU seleccionado")
         if self.max_ocr_calls < self.max_ocr_pages + 1:
             raise ValueError("OCR requiere presupuesto para búsqueda más un detalle")
         if self.max_ocr_total_pixels < self.max_ocr_pages * self.max_ocr_search_pixels + self.max_ocr_detail_pixels:
@@ -105,6 +122,36 @@ class SecurityPolicy:
 
 
 DEFAULT_SECURITY_POLICY = SecurityPolicy()
+
+
+def intel_8gb_policy(processor: str = "i3", **overrides: object) -> SecurityPolicy:
+    """Crea el perfil CPU soportado para Windows 10/11 x64.
+
+    ``i3`` queda limitado a dos hilos; ``i5`` permite cuatro hilos. La cuota
+    de memoria del Job ya es 2 GiB, la cola tiene un único trabajo activo y
+    ningún parámetro permite elevar esos límites por defecto.
+    """
+    normalized = processor.strip().lower()
+    if normalized not in {"i3", "i5"}:
+        raise ValueError("El procesador debe ser i3 o i5")
+    profile = f"intel-{normalized}-8gb"
+    values = {
+        "cpu_profile": profile,
+        "model_threads": 4 if normalized == "i5" else 2,
+        "max_concurrent_jobs": 1,
+        "max_queued_jobs": 1,
+        "windows_job_memory_bytes": 2 * 1024 * 1024 * 1024,
+    }
+    values.update(overrides)
+    # A profile factory is a security boundary, not a convenience constructor:
+    # callers may lower limits but never raise the hardware envelope.
+    if values["max_concurrent_jobs"] != 1 or values["max_queued_jobs"] != 1:
+        raise ValueError("El perfil CPU solo admite un trabajo activo y uno en espera")
+    if int(values["windows_job_memory_bytes"]) > 2 * 1024 * 1024 * 1024:
+        raise ValueError("El perfil CPU no puede superar 2 GiB por trabajo")
+    if int(values["model_threads"]) > (4 if normalized == "i5" else 2):
+        raise ValueError("Los hilos superan la capacidad del procesador seleccionado")
+    return SecurityPolicy(**values)
 
 
 def ensure_within(path: str | Path, root: str | Path) -> Path:

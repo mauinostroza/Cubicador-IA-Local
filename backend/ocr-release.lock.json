@@ -1,0 +1,83 @@
+{
+  "schema_version": 2,
+  "target": "windows-x64",
+  "release_enabled": false,
+  "feature_gates": {
+    "pdfium": false,
+    "paddle_ocr": false,
+    "poppler_payload": false
+  },
+  "profile": {
+    "name": "intel-8gb-cpu",
+    "supported_os": ["Windows 10", "Windows 11"],
+    "i3_threads": 2,
+    "i5_threads": 4,
+    "max_job_memory_bytes": 2147483648,
+    "max_concurrent_jobs": 1,
+    "max_pages": 5,
+    "ocr_engine": "PaddleOCR PP-OCRv5 mobile CPU",
+    "gpu": "disabled"
+  },
+  "pdf_backend": {
+    "production_candidate": "pypdfium2/PDFium",
+    "contract": "cubicador.pdf_backend.PdfBackend",
+    "coordinates": "PDF points, origin bottom-left; image pixels, origin top-left",
+    "requires_isolated_worker": true,
+    "requires_windows_wheel_pin": true,
+    "requires_pdfium_build_provenance": true
+  },
+  "artifacts": {
+    "pypdfium2_windows_x64": {
+      "version": null,
+      "url": null,
+      "sha256": null,
+      "size_bytes": null,
+      "license_spdx": ["BSD-3-Clause", "Apache-2.0"],
+      "status": "pending_release_pin"
+    },
+    "pdfium_binary": {
+      "version": null,
+      "url": null,
+      "sha256": null,
+      "size_bytes": null,
+      "license_spdx": ["BSD-3-Clause"],
+      "status": "pending_build_provenance"
+    },
+    "paddleocr_runner": {
+      "version": null,
+      "url": null,
+      "sha256": null,
+      "size_bytes": null,
+      "license_spdx": ["Apache-2.0"],
+      "status": "pending_release_pin"
+    },
+    "paddle_ocrv5_mobile_models": {
+      "version": null,
+      "url": null,
+      "sha256": null,
+      "size_bytes": null,
+      "license_spdx": ["Apache-2.0"],
+      "status": "pending_release_pin"
+    },
+    "poppler_legacy_dev_only": {
+      "version": null,
+      "url": null,
+      "sha256": null,
+      "size_bytes": null,
+      "license_spdx": ["GPL-2.0-or-later"],
+      "status": "never_in_release_payload"
+    }
+  },
+  "provenance": {
+    "spdx_inputs": "docs/dependencies/SPDX-INPUTS.md",
+    "sbom_template": "docs/dependencies/sbom.spdx.json",
+    "notices": "docs/dependencies/NOTICE-INPUTS.md"
+  },
+  "notes": [
+    "Este archivo es un contrato de release y no activa ninguna descarga ni ejecución.",
+    "Los campos version/url/sha256/size_bytes permanecen nulos hasta que el release aporte valores verificables.",
+    "No se aceptan hashes calculados desde un payload local como sustituto de una fuente y procedencia fijadas.",
+    "Poppler se conserva únicamente para pruebas legacy/dev explícitas y no forma parte del payload de producción.",
+    "El backend PDFium no se usa desde la API multihilo: requiere un worker aislado con Job Object aprobado."
+  ]
+}

@@ -62,3 +62,11 @@ PYTHONPATH=src python scripts/windows_vendor_smoke.py
 Qwen3-VL no está habilitado. Solo se evaluará como respaldo, con una llamada
 local sin herramientas ni red, si el benchmark de PaddleOCR demuestra que es
 necesario.
+
+## Migración PDFium
+
+Existe un scaffold cerrado para reemplazar Poppler por PDFium/pypdfium2 y
+evitar incorporar Poppler al paquete distribuible. Reconoce páginas, texto,
+coordenadas y render, pero sus gates permanecen apagados. No se activará hasta
+ejecutarlo dentro de un worker aislado y comprobar el flujo completo del plano
+real, incluidas las cantidades `31,40` y `2,18`.
