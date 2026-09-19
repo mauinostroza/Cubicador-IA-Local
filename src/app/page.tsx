@@ -41,7 +41,10 @@ export default function Home() {
     } catch { setBackendOnline(false); return false; }
   }, []);
 
-  useEffect(() => { void checkBackend(); }, [checkBackend]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void checkBackend(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [checkBackend]);
 
   const poll = useCallback(async (id: string) => {
     polling.current = true;

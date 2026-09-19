@@ -104,7 +104,9 @@ class ToolchainTests(unittest.TestCase):
             pin = _sha(manifest); (root / "toolchain-manifest.sha256").write_text(pin + "\n", encoding="ascii")
             bundle = TrustedToolchain(root, pin).verify_bundle()
             self.assertEqual(bundle.versions, {"paddle": "test-1", "poppler": "test-1"})
-            self.assertEqual(bundle.root / bundle.tools["paddle.runner"], root / paths["paddle.runner"])
+            # Windows puede presentar el mismo temporal con nombre 8.3
+            # (RUNNER~1) o largo; samefile compara la identidad real.
+            self.assertTrue((bundle.root / bundle.tools["paddle.runner"]).samefile(root / paths["paddle.runner"]))
             (root / "paddle/models/det.bin").write_bytes(b"tampered")
             with self.assertRaises(ToolchainError): TrustedToolchain(root, pin).verify_bundle()
 
