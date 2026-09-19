@@ -30,11 +30,20 @@ class PdfiumUnavailable(PdfBackendError):
 
 
 @dataclass(frozen=True, slots=True)
+class PdfTextCell:
+    """Token/celda geométrica reconstruida desde glifos PDFium."""
+
+    text: str
+    bbox: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
 class PdfTextSpan:
     """Fragmento de texto con evidencia geométrica en puntos PDF."""
 
     text: str
     bbox: tuple[float, float, float, float]
+    cells: tuple[PdfTextCell, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +53,8 @@ class PdfPageText:
     height_points: float
     text: str
     lines: tuple[PdfTextSpan, ...]
+    rotation: int = 0
+    bbox: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +151,8 @@ class PdfiumBackend:
             _check_page(page_number, len(document))
             page = document[page_number - 1]
             width, height = page.get_size()
+            rotation = int(page.get_rotation())
+            bbox = tuple(float(value) for value in page.get_bbox())
             textpage = page.get_textpage()
             try:
                 lines = _text_lines(textpage)
@@ -148,7 +161,7 @@ class PdfiumBackend:
                 close_text = getattr(textpage, "close", None)
                 if close_text:
                     close_text()
-            return PdfPageText(page_number, float(width), float(height), text, tuple(lines))
+            return PdfPageText(page_number, float(width), float(height), text, tuple(lines), rotation, bbox)
         except PdfBackendError:
             raise
         except Exception as exc:
@@ -202,16 +215,40 @@ class PdfiumBackend:
         try:
             _check_page(page_number, len(document))
             page = document[page_number - 1]
-            page_left, page_bottom, page_right, page_top = page.get_bbox()
-            width, height = page_right - page_left, page_top - page_bottom
+            page_left, page_bottom, page_right, page_top = (float(value) for value in page.get_bbox())
+            base_width, base_height = page_right - page_left, page_top - page_bottom
+            rotation = int(page.get_rotation())
+            # get_size() includes /Rotate.  Render budgets and crop margins
+            # therefore must use the displayed orientation, not MediaBox axes.
+            width, height = (float(value) for value in page.get_size())
             crop = None
             if crop_points is not None:
                 _check_bbox(crop_points, (float(page_left), float(page_bottom), float(page_right), float(page_top)))
                 left, bottom, right, top = crop_points
-                # PDFium recibe márgenes desde el CropBox, no un bbox.
-                crop = (left - page_left, bottom - page_bottom, page_right - right, page_top - top)
-            render_width = max(1, round((right - left) * dpi / 72)) if crop_points else max(1, round(width * dpi / 72))
-            render_height = max(1, round((top - bottom) * dpi / 72)) if crop_points else max(1, round(height * dpi / 72))
+                # PDFium recibe márgenes después de /Rotate, en el orden
+                # left,bottom,right,top. Convertimos el bbox PDF (origen
+                # abajo-izquierda) a esa orientación sin usar suposiciones
+                # sobre un CropBox que no comienza en (0,0).
+                x0, y0, x1, y1 = left - page_left, bottom - page_bottom, right - page_left, top - page_bottom
+                if rotation == 0:
+                    crop = (x0, y0, base_width - x1, base_height - y1)
+                elif rotation == 90:
+                    crop = (y0, base_width - x1, base_height - y1, x0)
+                elif rotation == 180:
+                    crop = (base_width - x1, base_height - y1, x0, y0)
+                elif rotation == 270:
+                    crop = (base_height - y1, x0, y0, base_width - x1)
+                else:
+                    raise PdfBackendError("Rotación PDF fuera de 0/90/180/270")
+            if crop_points:
+                crop_width, crop_height = right - left, top - bottom
+                if rotation in (90, 270):
+                    crop_width, crop_height = crop_height, crop_width
+                render_width = max(1, round(crop_width * dpi / 72))
+                render_height = max(1, round(crop_height * dpi / 72))
+            else:
+                render_width = max(1, round(width * dpi / 72))
+                render_height = max(1, round(height * dpi / 72))
             _check_render_budget(render_width, render_height, policy)
             bitmap = page.render(scale=dpi / 72, **({"crop": crop} if crop is not None else {}))
             try:
@@ -296,6 +333,9 @@ def _text_lines(textpage: object) -> list[PdfTextSpan]:
     for row in grouped:
         row.sort(key=lambda value: value[1][0])
         chars: list[str] = []
+        cells: list[PdfTextCell] = []
+        cell_chars: list[str] = []
+        cell_boxes: list[tuple[float, float, float, float]] = []
         previous_right = None
         widths = [box[2] - box[0] for _, box in row]
         nominal = max(1.0, float(median(widths)))
@@ -303,9 +343,16 @@ def _text_lines(textpage: object) -> list[PdfTextSpan]:
             gap = 0 if previous_right is None else box[0] - previous_right
             if gap > nominal * .60:
                 chars.append(" " * max(1, round(gap / nominal)))
+                if cell_chars:
+                    cells.append(PdfTextCell("".join(cell_chars), _make_span("", cell_boxes).bbox))
+                    cell_chars, cell_boxes = [], []
             chars.append(char.replace("\r", "").replace("\n", ""))
+            cell_chars.append(char.replace("\r", "").replace("\n", ""))
+            cell_boxes.append(box)
             previous_right = box[2]
-        result.append(_make_span("".join(chars), [box for _, box in row]))
+        if cell_chars:
+            cells.append(PdfTextCell("".join(cell_chars), _make_span("", cell_boxes).bbox))
+        result.append(_make_span("".join(chars), [box for _, box in row], cells))
     return result
 
 
@@ -325,11 +372,13 @@ def _check_render_budget(width: int, height: int, policy: SecurityPolicy) -> Non
         raise SecurityViolation("Render PDFium excede el límite de memoria de imagen")
 
 
-def _make_span(text: str, boxes: list[tuple[float, float, float, float]]) -> PdfTextSpan:
+def _make_span(text: str, boxes: list[tuple[float, float, float, float]],
+               cells: list[PdfTextCell] | None = None) -> PdfTextSpan:
     if not boxes:
-        return PdfTextSpan(text, (0.0, 0.0, 0.0, 0.0))
+        return PdfTextSpan(text, (0.0, 0.0, 0.0, 0.0), tuple(cells or ()))
     return PdfTextSpan(text, (min(v[0] for v in boxes), min(v[1] for v in boxes),
-                              max(v[2] for v in boxes), max(v[3] for v in boxes)))
+                              max(v[2] for v in boxes), max(v[3] for v in boxes)),
+                       tuple(cells or ()))
 
 
 def feature_enabled(policy: SecurityPolicy) -> bool:

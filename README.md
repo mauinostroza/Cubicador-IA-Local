@@ -67,6 +67,7 @@ necesario.
 
 Existe un scaffold cerrado para reemplazar Poppler por PDFium/pypdfium2 y
 evitar incorporar Poppler al paquete distribuible. Reconoce páginas, texto,
-coordenadas y render, pero sus gates permanecen apagados. No se activará hasta
-ejecutarlo dentro de un worker aislado y comprobar el flujo completo del plano
-real, incluidas las cantidades `31,40` y `2,18`.
+coordenadas y render dentro de un proceso hijo supervisado. Las pruebas E2E
+recuperan `31,40` y `2,18` con evidencia de celdas, además de CropBox y
+rotaciones. Sus gates permanecen apagados y no se activarán hasta disponer del
+runtime firmado, ACL protegidas y el payload OCR Windows validado.

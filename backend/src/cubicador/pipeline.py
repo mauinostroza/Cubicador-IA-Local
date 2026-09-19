@@ -6,7 +6,7 @@ from .adapters import HeuristicInterpreter, TableInterpreter
 from .excel import export_excel
 from .locator import locate_summary_tables
 from .models import ExtractionResult
-from .pdf_text import NoTextPdfError, PdfText, extract_layout_text, get_page_count
+from .pdf_text import NoTextPdfError, PdfText, extract_layout_text, extract_layout_text_pdfium, get_page_count
 from .ocr import OcrError, OcrProvider, ocr_document
 from .runtime import AuditStore, JobGate, JobWorkspace, atomic_write_bytes, safe_output_path
 from .security import DEFAULT_SECURITY_POLICY, SecurityPolicy, SecurityViolation
@@ -50,7 +50,10 @@ def process_pdf(pdf_path: str | Path, excel_path: str | Path | None = None, inte
 
 def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpreter | None, text_path: Path | None, policy: SecurityPolicy, workspace: Path, audit=None, ocr_provider: OcrProvider | None = None, cancel: threading.Event | None = None) -> ExtractionResult:
     try:
-        document = extract_layout_text(path, policy, workspace, audit, cancel)
+        if policy.pdfium_enabled and policy.pdfium_worker_enabled:
+            document = extract_layout_text_pdfium(path, policy, workspace, audit, cancel)
+        else:
+            document = extract_layout_text(path, policy, workspace, audit, cancel)
         page_count = len(document.pages)
     except NoTextPdfError:
         if ocr_provider is None:
@@ -63,7 +66,7 @@ def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpre
             hasher.update(chunk)
     digest = hasher.hexdigest()
     candidates = locate_summary_tables(document)
-    extraction_method = "pdftotext-layout"
+    extraction_method = "pdfium-worker" if policy.pdfium_enabled and policy.pdfium_worker_enabled else "pdftotext-layout"
     extracted_characters = sum(len("".join(page.split())) for page in document.pages)
     if not candidates and extracted_characters < 500 and ocr_provider is not None:
         try:
@@ -129,6 +132,30 @@ def _process_pdf(path: Path, excel_path: Path | None, interpreter: TableInterpre
                             quantity.confidence = match["confidence"]
                         else:
                             ambiguous_geometry = True
+            elif document.layout and candidates[0].page <= len(document.layout):
+                # PDFium cells are reconstructed from character gaps in the
+                # worker. A quantity receives geometry only on one exact cell;
+                # duplicates remain pending instead of being inferred.
+                spans = document.layout[candidates[0].page - 1]
+                for row in result.filas:
+                    needle_line = " ".join(row.evidencia.text.split()).casefold()
+                    line_matches = [span for span in spans if " ".join(span.text.split()).casefold() == needle_line]
+                    if len(line_matches) == 1:
+                        span = line_matches[0]
+                        row.evidencia.bbox = tuple(round(value) for value in span.bbox)
+                        row.evidencia.pdf_bbox_points = span.bbox
+                        row.evidencia.coordinate_frame = "pdf-points"
+                        row.evidencia.engine = "PDFium"
+                        row.evidencia.engine_version = "worker-v1"
+                        for quantity in row.quantities:
+                            needle = "".join(quantity.original.split()).casefold()
+                            matches = [cell for cell in span.cells if "".join(cell.text.split()).casefold() == needle]
+                            if len(matches) == 1:
+                                quantity.bbox = tuple(round(value) for value in matches[0].bbox)
+                            else:
+                                ambiguous_geometry = True
+                    else:
+                        ambiguous_geometry = True
             if ambiguous_geometry:
                 result.requiere_revision = True
                 result.advertencias.append("Evidencia geométrica de una o más cantidades es ambigua")
