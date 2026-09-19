@@ -53,7 +53,7 @@ class OcrTests(unittest.TestCase):
 
     def test_paddle_adapter_requires_vendor_assets(self):
         with self.assertRaises((SecurityViolation, OcrError, FileNotFoundError)):
-            PaddleOcrProvider("/tmp/runner", "/tmp/models", trusted_manifest_sha256="0"*64)
+            PaddleOcrProvider()
 
     def test_policy_rejects_invalid_ocr_limits(self):
         for values in ({"max_ocr_pages": 0}, {"ocr_search_dpi": 0}, {"max_ocr_search_pixels": 0}):

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from .security import DEFAULT_SECURITY_POLICY, SecurityPolicy
 from .runtime import AuditLog, run_command
+from .toolchain import ToolchainError, resolve_poppler_for_launch
 
 
 class PdfTextError(RuntimeError):
@@ -17,13 +18,11 @@ class NoTextPdfError(PdfTextError):
 def get_page_count(pdf_path: str | Path, policy: SecurityPolicy, workspace: Path,
                    audit: AuditLog | None = None) -> int:
     path = policy.validate_pdf(pdf_path)
-    suffix = ".exe" if __import__("os").name == "nt" else ""
-    candidates = (Path(__file__).resolve().parents[3] / "vendor" / "poppler" / "bin" / f"pdfinfo{suffix}",
-                  Path("/usr/bin/pdfinfo"), Path("/usr/local/bin/pdfinfo"))
-    executable = next((p.resolve() for p in candidates if p.is_file()), None)
-    if executable is None:
+    try: executable, verifier = resolve_poppler_for_launch("pdfinfo", developer_mode=policy.developer_tools_enabled)
+    except (ToolchainError, FileNotFoundError):
         raise PdfTextError("No se encontró pdfinfo en la ubicación controlada de Poppler")
-    completed = run_command([str(executable), str(path)], policy=policy, workspace=workspace, audit=audit)
+    completed = run_command([str(executable), str(path)], policy=policy, workspace=workspace, audit=audit,
+                             launch_verifier=verifier)
     if completed.returncode != 0:
         raise PdfTextError("pdfinfo no pudo inspeccionar el PDF")
     import re
@@ -52,17 +51,12 @@ def extract_layout_text(pdf_path: str | Path, policy: SecurityPolicy, workspace:
         path = policy.validate_pdf(pdf_path)
     except (ValueError, OSError) as exc:
         raise PdfTextError(str(exc)) from exc
-    candidates = (
-        Path(__file__).resolve().parents[3] / "vendor" / "poppler" / "bin" / ("pdftotext.exe" if __import__("os").name == "nt" else "pdftotext"),
-        Path("/usr/bin/pdftotext"),
-        Path("/usr/local/bin/pdftotext"),
-    )
-    executable_path = next((candidate.resolve() for candidate in candidates if candidate.is_file()), None)
-    if executable_path is None:
+    try: executable_path, verifier = resolve_poppler_for_launch("pdftotext", developer_mode=policy.developer_tools_enabled)
+    except (ToolchainError, FileNotFoundError):
         raise PdfTextError("No se encontró pdftotext en la ubicación controlada de Poppler")
     completed = run_command(
         [str(executable_path), "-layout", "-enc", "UTF-8", str(path), "-"],
-        policy=policy, workspace=workspace, audit=audit,
+        policy=policy, workspace=workspace, audit=audit, launch_verifier=verifier,
     )
     if completed.returncode != 0:
         raise PdfTextError(completed.stderr.decode("utf-8", "replace").strip() or "pdftotext falló")

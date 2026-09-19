@@ -7,6 +7,11 @@ on:
     paths:
       - "backend/src/cubicador/runtime.py"
       - "backend/src/cubicador/security.py"
+      - "backend/src/cubicador/ocr.py"
+      - "backend/src/cubicador/pdf_text.py"
+      - "backend/src/cubicador/toolchain.py"
+      - "backend/scripts/build_ocr_manifest.py"
+      - "backend/scripts/verify_ocr_vendor.py"
       - "backend/scripts/windows_job_smoke.py"
       - "backend/tests/**"
       - "backend/pyproject.toml"
@@ -15,6 +20,11 @@ on:
     paths:
       - "backend/src/cubicador/runtime.py"
       - "backend/src/cubicador/security.py"
+      - "backend/src/cubicador/ocr.py"
+      - "backend/src/cubicador/pdf_text.py"
+      - "backend/src/cubicador/toolchain.py"
+      - "backend/scripts/build_ocr_manifest.py"
+      - "backend/scripts/verify_ocr_vendor.py"
       - "backend/scripts/windows_job_smoke.py"
       - "backend/tests/**"
       - "backend/pyproject.toml"

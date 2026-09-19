@@ -40,6 +40,7 @@ class SecurityPolicy:
     max_audit_files: int = 100
     windows_job_objects_enabled: bool = True
     termination_grace_seconds: int = 5
+    developer_tools_enabled: bool = False
 
     def __post_init__(self) -> None:
         positive = (

@@ -25,6 +25,7 @@ CONTROLLED_PDFTOTEXT = (
     or Path("/usr/bin/pdftotext").is_file()
     or Path("/usr/local/bin/pdftotext").is_file()
 )
+DEV_POLICY = SecurityPolicy(developer_tools_enabled=True)
 
 
 def make_pdf(path: Path) -> None:
@@ -69,7 +70,7 @@ class PipelineTests(unittest.TestCase):
             root = Path(directory)
             pdf, xlsx = root / "plano.pdf", root / "cantidades.xlsx"
             make_pdf(pdf)
-            result = process_pdf(pdf, xlsx, output_root=root)
+            result = process_pdf(pdf, xlsx, output_root=root, policy=DEV_POLICY)
             self.assertTrue(result.tabla_encontrada)
             self.assertEqual(len(result.filas), 3)
             self.assertEqual(result.filas[1].quantities[0].numeric_value, 8450.0)
@@ -102,7 +103,7 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "none.pdf"
             SimpleDocTemplate(str(path)).build([Paragraph("Plano sin tabla", None)])
-            result = process_pdf(path)
+            result = process_pdf(path, policy=DEV_POLICY)
             self.assertFalse(result.tabla_encontrada)
 
     @unittest.skipUnless(CONTROLLED_PDFTOTEXT, "Poppler controlado no está empaquetado en este runner")
@@ -110,7 +111,7 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "cad.pdf"
             SimpleDocTemplate(str(path)).build([Paragraph("ESCALA FECHA REV.", None)])
-            result = process_pdf(path)
+            result = process_pdf(path, policy=DEV_POLICY)
             self.assertFalse(result.tabla_encontrada)
             self.assertTrue(result.requiere_revision)
             self.assertTrue(any("geometría CAD" in warning for warning in result.advertencias))
@@ -121,7 +122,7 @@ class PipelineTests(unittest.TestCase):
             root = Path(directory)
             pdf, xlsx, json_path = root / "plano.pdf", root / "out.xlsx", root / "out.json"
             make_pdf(pdf)
-            completed = subprocess.run([sys.executable, "-m", "cubicador.cli", str(pdf), "--output-dir", str(root), "--excel", str(xlsx), "--json", str(json_path)], capture_output=True, text=True)
+            completed = subprocess.run([sys.executable, "-m", "cubicador.cli", str(pdf), "--output-dir", str(root), "--excel", str(xlsx), "--json", str(json_path), "--developer-tools"], capture_output=True, text=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertTrue(xlsx.exists() and json_path.exists())
 

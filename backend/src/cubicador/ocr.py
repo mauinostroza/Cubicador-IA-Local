@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+from collections.abc import Callable
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import struct
 from .pdf_text import PdfText
 from .runtime import AuditLog, run_command
 from .security import SecurityPolicy, SecurityViolation, ensure_within
+from .toolchain import ToolchainError, resolve_poppler_for_launch, _reparse
 
 
 class OcrError(RuntimeError):
@@ -41,14 +43,9 @@ class OcrProvider(Protocol):
                   audit: AuditLog | None = None) -> OcrPage: ...
 
 
-def _tool(name: str) -> Path | None:
-    suffix = ".exe" if os.name == "nt" else ""
-    candidates = (
-        Path(__file__).resolve().parents[3] / "vendor" / "poppler" / "bin" / f"{name}{suffix}",
-        Path("/usr/bin") / name,
-        Path("/usr/local/bin") / name,
-    )
-    return next((p.resolve() for p in candidates if p.is_file()), None)
+def _tool(name: str, policy: SecurityPolicy) -> tuple[Path, Callable[[], Path]] | None:
+    try: return resolve_poppler_for_launch(name, developer_mode=policy.developer_tools_enabled)
+    except (ToolchainError, FileNotFoundError): return None
 
 
 def render_pages(pdf_path: Path, page_count: int, policy: SecurityPolicy, workspace: Path,
@@ -56,14 +53,15 @@ def render_pages(pdf_path: Path, page_count: int, policy: SecurityPolicy, worksp
     """Renderiza un número acotado de páginas; nunca llama herramientas del PATH."""
     if page_count > policy.max_ocr_pages:
         raise OcrError(f"OCR rechazado: el PDF supera {policy.max_ocr_pages} páginas")
-    executable = _tool("pdftoppm")
-    if executable is None:
+    resolved = _tool("pdftoppm", policy)
+    if resolved is None:
         raise OcrError("No se encontró pdftoppm en la ubicación controlada de Poppler")
+    executable, verifier = resolved
     prefix = ensure_within(workspace / "ocr-page", workspace)
     completed = run_command([
         str(executable), "-png", "-r", str(policy.ocr_search_dpi), "-scale-to", "4000", "-f", "1", "-l", str(page_count),
         "-singlefile" if page_count == 1 else "-forcenum", str(pdf_path), str(prefix),
-    ], policy=policy, workspace=workspace, audit=audit)
+        ], policy=policy, workspace=workspace, audit=audit, launch_verifier=verifier)
     if completed.returncode != 0:
         raise OcrError(completed.stderr.decode("utf-8", "replace").strip() or "pdftoppm falló")
     images = tuple(sorted(workspace.glob("ocr-page*.png")))
@@ -71,6 +69,8 @@ def render_pages(pdf_path: Path, page_count: int, policy: SecurityPolicy, worksp
         raise OcrError("Poppler no generó el número esperado de páginas")
     total_pixels = 0
     for image in images:
+        if _reparse(image) or not image.is_file():
+            raise SecurityViolation("Poppler generó una salida enlazada o inválida")
         if image.stat().st_size > policy.max_ocr_image_bytes:
             raise SecurityViolation("Imagen OCR excede el límite permitido")
         width, height = _png_size(image)
@@ -92,18 +92,20 @@ def _png_size(path: Path) -> tuple[int, int]:
 
 def _render_crop(pdf_path: Path, page_number: int, box: tuple[int, int, int, int], search_size: tuple[int, int],
                  policy: SecurityPolicy, workspace: Path, audit: AuditLog | None) -> Path:
-    executable = _tool("pdftoppm")
-    if executable is None:
+    resolved = _tool("pdftoppm", policy)
+    if resolved is None:
         raise OcrError("No se encontró pdftoppm en la ubicación controlada de Poppler")
+    executable, verifier = resolved
     points_w, points_h = _page_size_points(pdf_path, page_number, policy, workspace, audit)
     x, y, width, height = _transform_box(box, search_size, (points_w, points_h), policy.ocr_detail_dpi)
     prefix = ensure_within(workspace / f"ocr-table-{page_number}", workspace)
     completed = run_command([str(executable), "-png", "-r", str(policy.ocr_detail_dpi),
                              "-f", str(page_number), "-l", str(page_number), "-singlefile",
                              "-x", str(x), "-y", str(y), "-W", str(width), "-H", str(height),
-                             str(pdf_path), str(prefix)], policy=policy, workspace=workspace, audit=audit)
+                             str(pdf_path), str(prefix)], policy=policy, workspace=workspace, audit=audit,
+                             launch_verifier=verifier)
     output = prefix.with_suffix(".png")
-    if completed.returncode != 0 or not output.is_file():
+    if completed.returncode != 0 or _reparse(output) or not output.is_file():
         raise OcrError("No se pudo renderizar el recorte de la tabla")
     crop_width, crop_height = _png_size(output)
     if output.stat().st_size > policy.max_ocr_image_bytes or crop_width * crop_height > policy.max_ocr_detail_pixels:
@@ -121,11 +123,12 @@ def _transform_box(box: tuple[int, int, int, int], search_size: tuple[int, int],
 
 def _page_size_points(pdf_path: Path, page_number: int, policy: SecurityPolicy, workspace: Path,
                       audit: AuditLog | None) -> tuple[float, float]:
-    executable = _tool("pdfinfo")
-    if executable is None:
+    resolved = _tool("pdfinfo", policy)
+    if resolved is None:
         raise OcrError("No se encontró pdfinfo en la ubicación controlada de Poppler")
+    executable, verifier = resolved
     completed = run_command([str(executable), "-f", str(page_number), "-l", str(page_number), str(pdf_path)],
-                            policy=policy, workspace=workspace, audit=audit)
+                            policy=policy, workspace=workspace, audit=audit, launch_verifier=verifier)
     match = re.search(rb"(?m)^Page(?:\s+\d+)? size:\s*([0-9.]+)\s+x\s+([0-9.]+)\s+pts", completed.stdout)
     if completed.returncode != 0 or not match:
         raise OcrError("pdfinfo no informó dimensiones de página válidas")
@@ -311,45 +314,32 @@ class PaddleOcrProvider:
     importa Paddle dentro del proceso principal.
     """
 
-    def __init__(self, runner: str | Path, model_root: str | Path, *, trusted_manifest_sha256: str):
-        vendor = Path(__file__).resolve().parents[3] / "vendor"
-        if not vendor.is_dir():
-            raise OcrError("Directorio vendor no instalado")
-        self.runner = ensure_within(runner, vendor)
-        self.model_root = ensure_within(model_root, vendor)
-        if not self.runner.is_file() or not self.model_root.is_dir():
-            raise OcrError("Runner o modelos PaddleOCR locales no instalados")
-        manifest = self.model_root / "manifest.json"
-        if not manifest.is_file():
-            raise OcrError("Manifest OCR versionado no instalado")
+    def __init__(self):
+        from .toolchain import TrustedToolchain
+        self.toolchain = TrustedToolchain(Path(__file__).resolve().parents[3] / "vendor")
         try:
-            if not re.fullmatch(r"[0-9a-f]{64}", trusted_manifest_sha256) or _sha256(manifest) != trusted_manifest_sha256:
-                raise ValueError
-            raw = json.loads(manifest.read_text("utf-8"))
-            if (raw.get("schema_version") != 1 or not isinstance(raw.get("files"), dict) or not raw["files"]
-                    or not raw.get("model_version") or not raw.get("engine_version")): raise ValueError
-            self.engine, self.engine_version = "PaddleOCR", str(raw["engine_version"])
-            self.model_version = str(raw["model_version"])
-            self.model_hashes = {}
-            for relative, expected in raw["files"].items():
-                candidate = ensure_within(self.model_root / relative, self.model_root)
-                if not candidate.is_file() or not re.fullmatch(r"[0-9a-f]{64}", expected) or _sha256(candidate) != expected:
-                    raise ValueError
-                self.model_hashes[relative] = expected
-            runner_hash = raw.get("runner_sha256")
-            if runner_hash != _sha256(self.runner): raise ValueError
-            self.model_hashes["runner"] = runner_hash
-        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
-            raise OcrError("Manifest o archivos OCR no verificables") from exc
+            self.runner = self.toolchain.verify_and_resolve("paddle.runner")
+            self.model_root = (self.toolchain.vendor_root / "paddle" / "models").resolve(strict=True)
+        except Exception as exc:
+            raise OcrError("Toolchain PaddleOCR no disponible") from exc
+        self.engine, self.engine_version, self.model_version = "PaddleOCR", "pinned", "pinned"
+        self.model_hashes = {"toolchain_manifest": self.toolchain.trusted_manifest_sha256}
 
     def recognize(self, image_path: Path, *, policy: SecurityPolicy, workspace: Path,
                   audit: AuditLog | None = None) -> OcrPage:
+        # Revalida inventario completo y prepara una segunda atestación que
+        # run_command ejecuta justo antes de Popen/CreateProcessW. Esto cubre
+        # runner, DLL/runtime y todos los modelos del inventario.
+        self.runner = self.toolchain.verify_and_resolve("paddle.runner")
+        verifier = self.toolchain.launch_verifier("paddle.runner", self.runner)
+        self.model_root = ensure_within(self.model_root, self.toolchain.vendor_root)
         image = ensure_within(image_path, workspace)
         output = ensure_within(workspace / f"{image.stem}.ocr.json", workspace)
         completed = run_command([str(self.runner), "--offline", "--models", str(self.model_root),
                                  "--input", str(image), "--output", str(output)],
-                                policy=policy, workspace=workspace, audit=audit)
-        if completed.returncode != 0 or not output.is_file():
+                                policy=policy, workspace=workspace, audit=audit,
+                                launch_verifier=verifier)
+        if completed.returncode != 0 or _reparse(output) or not output.is_file():
             raise OcrError("PaddleOCR local falló o no generó salida")
         if output.stat().st_size > policy.max_response_bytes:
             raise SecurityViolation("Respuesta OCR excede el límite")

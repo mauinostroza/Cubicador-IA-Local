@@ -22,6 +22,13 @@ Esta etapa deja preparada y probada la integración, pero no constituye una prue
 end-to-end hasta empaquetar un runner PaddleOCR, sus modelos, el manifest firmado
 por hash confiable y la regla de Windows Firewall que bloquee su tráfico.
 
+La integración aún no está lista para activación de usuario. `--ocr` solo funciona
+cuando el build oficial reemplaza el pin deshabilitado del toolchain y empaqueta el
+inventario exacto de Poppler, Paddle, modelos, DLL y runtime. Ante archivos ausentes,
+adicionales o hashes distintos, falla antes de ejecutar. Los scripts de construcción
+y verificación no descargan contenido. El modo de desarrollo que admite `/usr/bin`
+es explícito y no forma parte del release Windows.
+
 ```bash
 cd backend
 python -m pip install -e .

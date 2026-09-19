@@ -14,6 +14,7 @@ import threading
 import time
 import signal
 import uuid
+from collections.abc import Callable
 
 from .security import DEFAULT_SECURITY_POLICY, SecurityPolicy, SecurityViolation, ensure_within
 
@@ -184,6 +185,7 @@ def run_command(
     argv: list[str], *, policy: SecurityPolicy = DEFAULT_SECURITY_POLICY,
     workspace: str | Path | None, timeout: int | None = None, cancel: threading.Event | None = None,
     audit: AuditLog | None = None,
+    launch_verifier: Callable[[], Path | None] | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
     if not argv or not all(isinstance(value, str) and "\x00" not in value for value in argv):
         raise SecurityViolation("Comando inválido")
@@ -200,11 +202,14 @@ def run_command(
     if _is_windows():
         if not policy.windows_job_objects_enabled:
             raise SecurityViolation("Job Objects Windows no habilitados: falta smoke/CI aprobado")
-        return _run_windows_job(argv, policy, timeout or policy.subprocess_timeout_seconds, cancel, workdir, audit)
+        return _run_windows_job(argv, policy, timeout or policy.subprocess_timeout_seconds, cancel, workdir, audit,
+                                launch_verifier)
     with tempfile.TemporaryFile(dir=workdir) as stdout_file, tempfile.TemporaryFile(dir=workdir) as stderr_file:
+        _verify_launch_target(argv, launch_verifier)
+        launch_path = str(Path(argv[0]).resolve().parent) if launch_verifier is not None else os.defpath
         process = subprocess.Popen(
             argv, stdin=subprocess.DEVNULL, stdout=stdout_file, stderr=stderr_file,
-            shell=False, start_new_session=True, cwd=workdir, env={"PATH": os.defpath, "LANG": "C.UTF-8"},
+            shell=False, start_new_session=True, cwd=workdir, env={"PATH": launch_path, "LANG": "C.UTF-8"},
         )
         deadline = time.monotonic() + (timeout or policy.subprocess_timeout_seconds)
         failure: Exception | None = None
@@ -233,11 +238,31 @@ def run_command(
     return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
+def _verify_launch_target(argv: list[str], verifier: Callable[[], Path | None] | None) -> None:
+    """Revalidate the executable immediately before process creation.
+
+    The verifier returns the path it attested. Comparing it with argv[0]
+    prevents an attestation from being accidentally applied to another
+    executable. Packaging/ACLs are still needed against a concurrent file
+    replacement after this last check.
+    """
+    if verifier is None:
+        return
+    verified = verifier()
+    if verified is not None:
+        expected = Path(argv[0]).resolve(strict=True)
+        actual = Path(verified).resolve(strict=True)
+        if expected != actual:
+            raise SecurityViolation("La atestación no corresponde al ejecutable solicitado")
+
+
 def _is_windows() -> bool:
     return os.name == "nt"
 
 
-def _run_windows_job(argv: list[str], policy: SecurityPolicy, timeout: int, cancel: threading.Event | None, workspace: Path, audit: AuditLog | None = None) -> subprocess.CompletedProcess[bytes]:
+def _run_windows_job(argv: list[str], policy: SecurityPolicy, timeout: int, cancel: threading.Event | None, workspace: Path,
+                     audit: AuditLog | None = None,
+                     launch_verifier: Callable[[], Path | None] | None = None) -> subprocess.CompletedProcess[bytes]:
     """CreateProcessW suspendido y asignado a un Job antes de ejecutar una instrucción."""
     import ctypes
     from ctypes import wintypes
@@ -370,13 +395,17 @@ def _run_windows_job(argv: list[str], policy: SecurityPolicy, timeout: int, canc
                 ctypes.cast(inherited_handles, wintypes.LPVOID), ctypes.sizeof(inherited_handles), None, None), "HANDLE_LIST")
             command = ctypes.create_unicode_buffer(subprocess.list2cmdline(argv))
             safe_environment = {
-                "PATH": os.defpath,
+                # A verified bundle must resolve its private DLLs from its own
+                # directory; inheriting the user's PATH would reintroduce a
+                # system substitution path for a missing dependency.
+                "PATH": str(Path(argv[0]).resolve(strict=True).parent) if launch_verifier is not None else os.defpath,
                 "SYSTEMROOT": os.environ.get("SystemRoot", r"C:\Windows"),
                 "WINDIR": os.environ.get("SystemRoot", r"C:\Windows"),
             }
             environment = ctypes.create_unicode_buffer("\0".join(f"{key}={value}" for key, value in sorted(safe_environment.items())) + "\0\0")
             with _WINDOWS_CREATE_LOCK:
                 try:
+                    _verify_launch_target(argv, launch_verifier)
                     for handle in std_handles:
                         os.set_handle_inheritable(handle, True)
                     check(kernel32.CreateProcessW(argv[0], command, None, None, True, CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
