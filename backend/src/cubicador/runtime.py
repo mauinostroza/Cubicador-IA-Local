@@ -186,6 +186,7 @@ def run_command(
     workspace: str | Path | None, timeout: int | None = None, cancel: threading.Event | None = None,
     audit: AuditLog | None = None,
     launch_verifier: Callable[[], Path | None] | None = None,
+    require_restricted_identity: bool = False,
 ) -> subprocess.CompletedProcess[bytes]:
     if not argv or not all(isinstance(value, str) and "\x00" not in value for value in argv):
         raise SecurityViolation("Comando inválido")
@@ -196,6 +197,11 @@ def run_command(
         raise CancelledError("Trabajo cancelado")
     if workspace is None:
         raise SecurityViolation("workspace es obligatorio para ejecutar procesos")
+    if require_restricted_identity:
+        # Una verificación previa nunca autoriza CreateProcessW. El futuro
+        # lanzador seguro debe ser dueño de crear, inspeccionar, asignar al Job
+        # y reanudar el proceso. Hasta entonces este recorrido no continúa.
+        raise SecurityViolation("Lanzamiento AppContainer completo aún no habilitado")
     workdir = Path(workspace)
     if workdir.is_symlink() or not workdir.resolve(strict=True).is_dir():
         raise SecurityViolation("workspace inválido")

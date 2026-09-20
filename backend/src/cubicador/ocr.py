@@ -395,6 +395,7 @@ class PaddleOcrProvider:
         completed = run_command([str(self.runner), "--request", str(request), "--workspace", str(Path(workspace).resolve())],
                                 policy=policy, workspace=workspace, audit=audit,
                                 launch_verifier=verifier, cancel=cancel,
+                                require_restricted_identity=True,
                                 timeout=policy.model_timeout_seconds)
         if completed.stdout or completed.stderr:
             raise SecurityViolation("El runner OCR escribió en canales no autorizados")
