@@ -5,8 +5,10 @@ from pathlib import Path
 from typing import Protocol
 from collections.abc import Callable
 import json
+import math
 import os
 import re
+import secrets
 import struct
 import threading
 
@@ -18,6 +20,35 @@ from .toolchain import ToolchainError, resolve_poppler_for_launch, _reparse
 
 class OcrError(RuntimeError):
     pass
+
+
+def _strict_json_loads(data: str) -> object:
+    def pairs(values: list[tuple[str, object]]) -> dict:
+        result: dict = {}
+        for key, value in values:
+            if key in result:
+                raise ValueError("clave duplicada")
+            result[key] = value
+        return result
+    def reject(_value: str) -> object:
+        raise ValueError("número no finito")
+    return json.loads(data, object_pairs_hook=pairs, parse_constant=reject)
+
+
+def _safe_worker_file(path: Path, workspace: Path, *, require_nonempty: bool = True) -> bool:
+    try:
+        root = Path(workspace).resolve(strict=True)
+        candidate = path.resolve(strict=True)
+        current = path
+        while True:
+            if _reparse(current): return False
+            if current.resolve(strict=True) == root: break
+            if not current.resolve(strict=True).is_relative_to(root) or current.parent == current: return False
+            current = current.parent
+        stat = candidate.stat()
+        return candidate.is_file() and stat.st_nlink == 1 and (not require_nonempty or stat.st_size > 0)
+    except OSError:
+        return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -327,7 +358,7 @@ class PaddleOcrProvider:
             self.model_root = (self.toolchain.vendor_root / "paddle" / "models").resolve(strict=True)
         except Exception as exc:
             raise OcrError("Toolchain PaddleOCR no disponible") from exc
-        self.engine, self.engine_version, self.model_version = "PaddleOCR", "pinned", "pinned"
+        self.engine, self.engine_version, self.model_version = "PaddleOCR-minimal", "pinned", "pinned"
         self.model_hashes = {"toolchain_manifest": self.toolchain.trusted_manifest_sha256}
 
     def recognize(self, image_path: Path, *, policy: SecurityPolicy, workspace: Path,
@@ -339,20 +370,59 @@ class PaddleOcrProvider:
         verifier = self.toolchain.launch_verifier("paddle.runner", self.runner)
         self.model_root = ensure_within(self.model_root, self.toolchain.vendor_root)
         image = ensure_within(image_path, workspace)
-        output = ensure_within(workspace / f"{image.stem}.ocr.json", workspace)
-        completed = run_command([str(self.runner), "--offline", "--models", str(self.model_root),
-                                 "--input", str(image), "--output", str(output)],
+        job_id = secrets.token_hex(16)
+        output = ensure_within(workspace / f"{image.stem}.{job_id}.ocr.json", workspace)
+        request = ensure_within(workspace / f"{image.stem}.{job_id}.ocr-request.json", workspace)
+        if request.exists() or output.exists():
+            raise SecurityViolation("Archivos reservados OCR ya existen")
+        payload = {
+            "schema": 1, "operation": "recognize", "job_id": job_id,
+            "image": str(image), "output": str(output),
+            "limits": {"max_image_bytes": policy.max_ocr_image_bytes,
+                       "max_pixels": max(policy.max_ocr_search_pixels, policy.max_ocr_detail_pixels),
+                       "max_response_bytes": policy.max_response_bytes,
+                       "max_lines": 10_000, "max_text_chars": 500_000},
+        }
+        encoded = (json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_BINARY"): flags |= os.O_BINARY
+        if hasattr(os, "O_NOFOLLOW"): flags |= os.O_NOFOLLOW
+        fd = os.open(request, flags, 0o600)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(encoded); stream.flush(); os.fsync(stream.fileno())
+        completed = run_command([str(self.runner), "--request", str(request), "--workspace", str(Path(workspace).resolve())],
                                 policy=policy, workspace=workspace, audit=audit,
-                                launch_verifier=verifier, cancel=cancel)
-        if completed.returncode != 0 or _reparse(output) or not output.is_file():
+                                launch_verifier=verifier, cancel=cancel,
+                                timeout=policy.model_timeout_seconds)
+        if completed.stdout or completed.stderr:
+            raise SecurityViolation("El runner OCR escribió en canales no autorizados")
+        if completed.returncode != 0 or not _safe_worker_file(output, Path(workspace)):
             raise OcrError("PaddleOCR local falló o no generó salida")
-        if output.stat().st_size > policy.max_response_bytes:
+        if output.stat().st_size <= 0 or output.stat().st_size > policy.max_response_bytes:
             raise SecurityViolation("Respuesta OCR excede el límite")
         try:
-            raw = json.loads(output.read_text("utf-8"))
-            lines = tuple(OcrLine(text=str(v["text"]), x0=int(v["x0"]), y0=int(v["y0"]),
-                                  x1=int(v["x1"]), y1=int(v["y1"]), confidence=float(v["confidence"]))
-                          for v in raw["lines"])
-            return OcrPage(int(raw["width"]), int(raw["height"]), lines)
+            raw = _strict_json_loads(output.read_text("utf-8"))
+            if (not isinstance(raw, dict) or set(raw) != {"schema", "ok", "job_id", "width", "height", "lines"}
+                    or type(raw.get("schema")) is not int or raw.get("schema") != 1
+                    or raw.get("ok") is not True or type(raw.get("job_id")) is not str
+                    or raw.get("job_id") != job_id or type(raw.get("width")) is not int
+                    or type(raw.get("height")) is not int or not isinstance(raw.get("lines"), list)):
+                raise ValueError("esquema inválido")
+            if (raw["width"], raw["height"]) != _png_size(image):
+                raise ValueError("dimensiones no coinciden")
+            lines_list: list[OcrLine] = []
+            for value in raw["lines"]:
+                if (not isinstance(value, dict)
+                        or set(value) != {"text", "x0", "y0", "x1", "y1", "confidence"}
+                        or type(value["text"]) is not str
+                        or any(type(value[key]) is not int for key in ("x0", "y0", "x1", "y1"))
+                        or type(value["confidence"]) not in (int, float)
+                        or not math.isfinite(value["confidence"])):
+                    raise ValueError("línea inválida")
+                lines_list.append(OcrLine(value["text"], value["x0"], value["y0"],
+                                          value["x1"], value["y1"], float(value["confidence"])))
+            page = OcrPage(raw["width"], raw["height"], tuple(lines_list))
+            _validate_page(page, max(policy.max_ocr_search_pixels, policy.max_ocr_detail_pixels))
+            return page
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise OcrError("Salida PaddleOCR inválida") from exc
