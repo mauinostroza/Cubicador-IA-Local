@@ -351,7 +351,9 @@ class PaddleOcrProvider:
     """
 
     def __init__(self):
+        from .security_gate import require_security_gate
         from .toolchain import TrustedToolchain
+        require_security_gate()
         self.toolchain = TrustedToolchain(Path(__file__).resolve().parents[3] / "vendor")
         try:
             self.runner = self.toolchain.verify_and_resolve("paddle.runner")

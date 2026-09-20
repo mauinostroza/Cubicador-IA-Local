@@ -161,7 +161,7 @@ def build(lock_path: Path, staging: Path, *, require_complete: bool = False) -> 
     if not _is_ci():
         raise StagingError("staging con red solo puede ejecutarse dentro de CI")
     spec = json.loads(lock_path.read_text("utf-8"))
-    if spec.get("release_enabled") is not False or any(spec.get("feature_gates", {}).get(k) is not False for k in ("pdfium", "paddle_ocr", "poppler_payload")):
+    if spec.get("release_enabled") is not False or any(spec.get("feature_gates", {}).get(k) is not False for k in ("pdfium", "paddle_ocr", "poppler_payload", "security_boundary")):
         raise StagingError("los gates deben permanecer cerrados durante staging")
     artifacts = spec.get("artifacts")
     names = spec.get("build_inputs")

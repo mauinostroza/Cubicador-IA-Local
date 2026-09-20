@@ -8,6 +8,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
 def validate(lock_path: Path) -> list[str]:
@@ -18,7 +22,7 @@ def validate(lock_path: Path) -> list[str]:
     if spec.get("release_enabled") is not False:
         errors.append("release_enabled debe permanecer false")
     gates = spec.get("feature_gates", {})
-    if any(gates.get(name) is not False for name in ("pdfium", "paddle_ocr", "poppler_payload")):
+    if any(gates.get(name) is not False for name in ("pdfium", "paddle_ocr", "poppler_payload", "security_boundary")):
         errors.append("todos los feature gates deben estar cerrados")
     artifacts = spec.get("artifacts", {})
     verified_inputs = set(spec.get("build_inputs", []))
@@ -79,10 +83,17 @@ def validate(lock_path: Path) -> list[str]:
             errors.append("Poppler debe estar marcado como legacy/dev únicamente")
     provenance = spec.get("provenance", {})
     root = lock_path.parent
-    for field in ("spdx_inputs", "sbom_template", "notices"):
+    for field in ("spdx_inputs", "sbom_template", "notices", "security_gate"):
         value = provenance.get(field)
         if not isinstance(value, str) or not (root / value).is_file():
             errors.append(f"falta input de provenance: {field}")
+    security_gate = root / provenance.get("security_gate", "")
+    if security_gate.is_file():
+        try:
+            from cubicador.security_gate import validate_security_gate
+            errors.extend(f"security gate: {item}" for item in validate_security_gate(security_gate))
+        except ImportError as exc:
+            errors.append(f"no se pudo validar security gate: {exc}")
     sbom_path = root / provenance.get("sbom_template", "")
     if sbom_path.is_file():
         try:

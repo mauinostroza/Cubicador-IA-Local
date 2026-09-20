@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "approved": false,
+  "worker_identity": {
+    "container": "appcontainer",
+    "integrity_level": "low",
+    "run_as_administrator": false,
+    "allowed_privileges": ["SeChangeNotifyPrivilege"],
+    "network_capabilities": [],
+    "credential_access": false
+  },
+  "keys": {
+    "session_token": "random-256-bit-memory-only",
+    "session_token_lifetime": "process",
+    "per_job_nonce": true,
+    "persistent_secrets": false,
+    "command_line_secrets": false,
+    "logged_secrets": false
+  },
+  "resources": {
+    "allowed_read": ["signed-vendor-bundle", "job-input"],
+    "allowed_write": ["private-job-workspace"],
+    "denied": [
+      "internet", "lan", "loopback-network", "user-profile", "registry-write",
+      "shell", "child-process-outside-job", "clipboard", "camera", "microphone",
+      "user-credentials", "files-outside-workspace"
+    ]
+  },
+  "audit": {
+    "hash_chain": true,
+    "max_bytes": 10485760,
+    "required_events": [
+      "worker-start", "gate-decision", "outbound-connection-allowed",
+      "outbound-connection-blocked", "file-access-denied", "worker-stop"
+    ],
+    "windows_event_ids": [5156, 5157],
+    "required_fields": [
+      "timestamp", "job_id", "worker_pid", "executable_sha256", "decision",
+      "protocol", "destination_ip", "destination_port", "rule_id"
+    ],
+    "secret_fields_forbidden": true
+  },
+  "evidence": {
+    "appcontainer_no_capabilities": false,
+    "restricted_token": false,
+    "vendor_acl_read_only": false,
+    "workspace_acl_private": false,
+    "firewall_block_outbound": false,
+    "wfp_allowed_event_capture": false,
+    "wfp_blocked_event_capture": false,
+    "ephemeral_token_rotation": false,
+    "windows_10_smoke": false,
+    "windows_11_smoke": false
+  }
+}

@@ -133,7 +133,8 @@ class StagingTests(unittest.TestCase):
             }
             lock = {
                 "release_enabled": False,
-                "feature_gates": {"pdfium": False, "paddle_ocr": False, "poppler_payload": False},
+                "feature_gates": {"pdfium": False, "paddle_ocr": False, "poppler_payload": False,
+                                  "security_boundary": False},
                 "artifacts": {"a": verified, "b": verified}, "build_inputs": ["a", "b"],
             }
             lock_path = root / "lock.json"; lock_path.write_text(json.dumps(lock), encoding="utf-8")
@@ -149,7 +150,8 @@ class StagingTests(unittest.TestCase):
             root = Path(raw)
             lock = {
                 "release_enabled": False,
-                "feature_gates": {"pdfium": False, "paddle_ocr": False, "poppler_payload": False},
+                "feature_gates": {"pdfium": False, "paddle_ocr": False, "poppler_payload": False,
+                                  "security_boundary": False},
                 "artifacts": {
                     "input": {"status": "verified_upstream_pypi", "filename": "asset.bin",
                               "url": "https://files.pythonhosted.org/x/asset.bin", "sha256": "0" * 64,
@@ -173,7 +175,8 @@ class StagingTests(unittest.TestCase):
             root = Path(raw)
             lock = {
                 "release_enabled": False,
-                "feature_gates": {"pdfium": False, "paddle_ocr": False, "poppler_payload": False},
+                "feature_gates": {"pdfium": False, "paddle_ocr": False, "poppler_payload": False,
+                                  "security_boundary": False},
                 "artifacts": {"models": {"status": "blocked_no_upstream_sha256"}},
                 "build_inputs": ["models"],
             }

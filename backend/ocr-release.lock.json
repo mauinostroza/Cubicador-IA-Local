@@ -5,7 +5,8 @@
   "feature_gates": {
     "pdfium": false,
     "paddle_ocr": false,
-    "poppler_payload": false
+    "poppler_payload": false,
+    "security_boundary": false
   },
   "profile": {
     "name": "intel-8gb-cpu",
@@ -124,7 +125,8 @@
   "provenance": {
     "spdx_inputs": "docs/dependencies/SPDX-INPUTS.md",
     "sbom_template": "docs/dependencies/sbom.spdx.json",
-    "notices": "docs/dependencies/NOTICE-INPUTS.md"
+    "notices": "docs/dependencies/NOTICE-INPUTS.md",
+    "security_gate": "security-gate.json"
   },
   "build_inputs": [
     "pypdfium2_windows_x64",
