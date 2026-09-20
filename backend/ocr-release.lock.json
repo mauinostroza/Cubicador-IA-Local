@@ -28,36 +28,81 @@
   },
   "artifacts": {
     "pypdfium2_windows_x64": {
-      "version": null,
-      "url": null,
-      "sha256": null,
-      "size_bytes": null,
+      "version": "5.3.0",
+      "filename": "pypdfium2-5.3.0-py3-none-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/2c/dc/1388ea650020c26ef3f68856b9227e7f153dcaf445e7e4674a0b8f26891e/pypdfium2-5.3.0-py3-none-win_amd64.whl",
+      "sha256": "8365af22a39d4373c265f8e90e561cd64d4ddeaf5e6a66546a8caed216ab9574",
+      "size_bytes": 3102340,
       "license_spdx": ["BSD-3-Clause", "Apache-2.0"],
-      "status": "pending_release_pin"
+      "status": "verified_upstream_pypi",
+      "source_record": "https://pypi.org/pypi/pypdfium2/5.3.0/json",
+      "notes": "El wheel incluye pypdfium2_raw/pdfium.dll y las licencias PDFium/third-party; el DLL no se declara como descarga independiente."
     },
     "pdfium_binary": {
       "version": null,
       "url": null,
       "sha256": null,
       "size_bytes": null,
-      "license_spdx": ["BSD-3-Clause"],
-      "status": "pending_build_provenance"
+      "license_spdx": ["NOASSERTION"],
+      "status": "blocked_no_independent_upstream_pin",
+      "blocked_reason": "PDFium se distribuye embebido dentro del wheel pypdfium2 verificado. No existe en este release un artefacto Windows x64 independiente con hash y procedencia upstream que pueda fijarse sin inferirlos localmente.",
+      "source_urls": ["https://github.com/pypdfium2-team/pypdfium2", "https://pdfium.googlesource.com/pdfium/"]
     },
     "paddleocr_runner": {
       "version": null,
       "url": null,
       "sha256": null,
       "size_bytes": null,
-      "license_spdx": ["Apache-2.0"],
-      "status": "pending_release_pin"
+      "license_spdx": ["NOASSERTION"],
+      "status": "blocked_no_official_windows_runner",
+      "blocked_reason": "PaddleOCR publica el paquete Python, pero no un paddle_ocr_runner.exe Windows x64 oficial para este contrato. No se fabricará ni se aceptará un ejecutable no verificable.",
+      "source_urls": ["https://pypi.org/project/paddleocr/3.2.0/", "https://github.com/PaddlePaddle/PaddleOCR"]
     },
     "paddle_ocrv5_mobile_models": {
       "version": null,
       "url": null,
       "sha256": null,
       "size_bytes": null,
+      "license_spdx": ["NOASSERTION"],
+      "status": "blocked_no_upstream_sha256",
+      "blocked_reason": "El repositorio oficial publica las URL de los modelos PP-OCRv5 mobile, pero no un SHA-256 upstream verificable para los tarball de inferencia. La descarga queda prohibida hasta disponer de un digest oficial.",
+      "source_urls": [
+        "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_det_infer.tar",
+        "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_rec_infer.tar",
+        "https://github.com/PaddlePaddle/PaddleOCR"
+      ]
+    },
+    "paddlepaddle_windows_x64_cp312": {
+      "version": "3.2.0",
+      "filename": "paddlepaddle-3.2.0-cp312-cp312-win_amd64.whl",
+      "url": "https://files.pythonhosted.org/packages/61/f9/eadca6e6499269f8de35b3f51675240d476023919b381acca5bf526d7fb2/paddlepaddle-3.2.0-cp312-cp312-win_amd64.whl",
+      "sha256": "918e69c98a1310db08610f28a2d0812ea779ec819053c44cc55ce7dc72ab6ee6",
+      "size_bytes": 101654665,
       "license_spdx": ["Apache-2.0"],
-      "status": "pending_release_pin"
+      "status": "verified_upstream_pypi",
+      "source_record": "https://pypi.org/pypi/paddlepaddle/3.2.0/json"
+    },
+    "paddleocr_python": {
+      "version": "3.2.0",
+      "filename": "paddleocr-3.2.0-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/74/72/c8218cc7489762ab3d1fb25721f8c928f10085e38feb8d52fd6583bfc592/paddleocr-3.2.0-py3-none-any.whl",
+      "sha256": "2b942295ad5963de8e01d68afb15a9507d713bc7299e2dfeb198d9c3ac5cf76f",
+      "size_bytes": 75976,
+      "license_spdx": ["Apache-2.0"],
+      "status": "excluded_from_release_reference",
+      "excluded_reason": "El paquete completo PaddleOCR incorpora PaddleX y rutas de descarga/red. El release usará un runner mínimo propio sin estas dependencias.",
+      "source_record": "https://pypi.org/pypi/paddleocr/3.2.0/json"
+    },
+    "paddlex_python": {
+      "version": "3.2.1",
+      "filename": "paddlex-3.2.1-py3-none-any.whl",
+      "url": "https://files.pythonhosted.org/packages/99/58/0bece5a78af15d13e7cac7f1dca8b0c192ecc727b0ab8731ccf898273217/paddlex-3.2.1-py3-none-any.whl",
+      "sha256": "36644d8845f0d433b2412ffad61683ec2647c7475ff29dffdff153f42cb9c9b4",
+      "size_bytes": 1702379,
+      "license_spdx": ["Apache-2.0"],
+      "status": "excluded_from_release_reference",
+      "excluded_reason": "PaddleX no forma parte del payload: incluye funcionalidades y dependencias de red innecesarias para el runner OCR mínimo.",
+      "source_record": "https://pypi.org/pypi/paddlex/3.2.1/json"
     },
     "poppler_legacy_dev_only": {
       "version": null,
@@ -73,9 +118,15 @@
     "sbom_template": "docs/dependencies/sbom.spdx.json",
     "notices": "docs/dependencies/NOTICE-INPUTS.md"
   },
+  "build_inputs": [
+    "pypdfium2_windows_x64",
+    "paddlepaddle_windows_x64_cp312"
+  ],
   "notes": [
     "Este archivo es un contrato de release y no activa ninguna descarga ni ejecución.",
-    "Los campos version/url/sha256/size_bytes permanecen nulos hasta que el release aporte valores verificables.",
+    "El staging descarga únicamente pypdfium2 y PaddlePaddle desde URL inmutable de PyPI, verificando tamaño y SHA-256 antes de extraer.",
+    "PaddleOCR y PaddleX se conservan como referencias de auditoría, pero están excluidos del payload por incorporar rutas y dependencias de red innecesarias.",
+    "Los modelos PP-OCRv5, el runner Windows y un PDFium independiente permanecen bloqueados por falta de digest/procedencia upstream suficiente.",
     "No se aceptan hashes calculados desde un payload local como sustituto de una fuente y procedencia fijadas.",
     "Poppler se conserva únicamente para pruebas legacy/dev explícitas y no forma parte del payload de producción.",
     "El backend PDFium no se usa desde la API multihilo: requiere un worker aislado con Job Object aprobado."

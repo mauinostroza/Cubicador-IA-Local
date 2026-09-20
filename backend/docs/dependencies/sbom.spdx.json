@@ -2,7 +2,7 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "cubicador-ia-local-pending-ocr-inputs",
+  "name": "cubicador-ia-local-ocr-staging-inputs",
   "documentNamespace": "https://helicon.cl/cubicador/sbom/pending-ocr-inputs",
   "creationInfo": {
     "created": "2026-09-19T00:00:00Z",
@@ -12,12 +12,15 @@
     {
       "SPDXID": "SPDXRef-pypdfium2",
       "name": "pypdfium2",
-      "versionInfo": "NOASSERTION",
-      "downloadLocation": "NOASSERTION",
-      "licenseConcluded": "NOASSERTION",
+      "packageFileName": "pypdfium2-5.3.0-py3-none-win_amd64.whl",
+      "versionInfo": "5.3.0",
+      "downloadLocation": "https://files.pythonhosted.org/packages/2c/dc/1388ea650020c26ef3f68856b9227e7f153dcaf445e7e4674a0b8f26891e/pypdfium2-5.3.0-py3-none-win_amd64.whl",
+      "licenseConcluded": "BSD-3-Clause AND Apache-2.0",
       "licenseDeclared": "BSD-3-Clause AND Apache-2.0",
       "copyrightText": "NOASSERTION",
-      "supplier": "NOASSERTION"
+      "supplier": "Organization: pypdfium2-team",
+      "checksums": [{"algorithm": "SHA256", "checksumValue": "8365af22a39d4373c265f8e90e561cd64d4ddeaf5e6a66546a8caed216ab9574"}
+      ]
     },
     {
       "SPDXID": "SPDXRef-PDFium",
@@ -27,22 +30,77 @@
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "BSD-3-Clause",
       "copyrightText": "NOASSERTION",
-      "supplier": "NOASSERTION"
+      "supplier": "NOASSERTION",
+      "comment": "BLOCKED: embedded in pypdfium2 wheel; no independent upstream digest/build provenance"
+    },
+    {
+      "SPDXID": "SPDXRef-PaddlePaddle",
+      "name": "paddlepaddle",
+      "packageFileName": "paddlepaddle-3.2.0-cp312-cp312-win_amd64.whl",
+      "versionInfo": "3.2.0 cp312 win_amd64",
+      "downloadLocation": "https://files.pythonhosted.org/packages/61/f9/eadca6e6499269f8de35b3f51675240d476023919b381acca5bf526d7fb2/paddlepaddle-3.2.0-cp312-cp312-win_amd64.whl",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "supplier": "Organization: PaddlePaddle Authors",
+      "checksums": [{"algorithm": "SHA256", "checksumValue": "918e69c98a1310db08610f28a2d0812ea779ec819053c44cc55ce7dc72ab6ee6"}]
     },
     {
       "SPDXID": "SPDXRef-PaddleOCR",
-      "name": "PaddleOCR PP-OCRv5 mobile CPU inputs",
+      "name": "paddleocr",
+      "packageFileName": "paddleocr-3.2.0-py3-none-any.whl",
+      "versionInfo": "3.2.0",
+      "downloadLocation": "https://files.pythonhosted.org/packages/74/72/c8218cc7489762ab3d1fb25721f8c928f10085e38feb8d52fd6583bfc592/paddleocr-3.2.0-py3-none-any.whl",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "supplier": "Organization: PaddlePaddle Authors",
+      "comment": "REFERENCE ONLY: excluded from release payload because the standard package includes download/network paths",
+      "checksums": [{"algorithm": "SHA256", "checksumValue": "2b942295ad5963de8e01d68afb15a9507d713bc7299e2dfeb198d9c3ac5cf76f"}]
+    },
+    {
+      "SPDXID": "SPDXRef-PaddleX",
+      "name": "paddlex",
+      "packageFileName": "paddlex-3.2.1-py3-none-any.whl",
+      "versionInfo": "3.2.1",
+      "downloadLocation": "https://files.pythonhosted.org/packages/99/58/0bece5a78af15d13e7cac7f1dca8b0c192ecc727b0ab8731ccf898273217/paddlex-3.2.1-py3-none-any.whl",
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "supplier": "Organization: PaddlePaddle Authors",
+      "comment": "REFERENCE ONLY: excluded from release payload because the standard package includes download/network paths",
+      "checksums": [{"algorithm": "SHA256", "checksumValue": "36644d8845f0d433b2412ffad61683ec2647c7475ff29dffdff153f42cb9c9b4"}]
+    },
+    {
+      "SPDXID": "SPDXRef-PPOCRv5Models",
+      "name": "PP-OCRv5 mobile inference models",
       "versionInfo": "NOASSERTION",
       "downloadLocation": "NOASSERTION",
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "Apache-2.0",
       "copyrightText": "NOASSERTION",
-      "supplier": "NOASSERTION"
+      "supplier": "NOASSERTION",
+      "comment": "BLOCKED: official URLs are documented, but no upstream SHA-256 is published"
+    },
+    {
+      "SPDXID": "SPDXRef-PaddleOCRRunner",
+      "name": "PaddleOCR Windows x64 runner",
+      "versionInfo": "NOASSERTION",
+      "downloadLocation": "NOASSERTION",
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "supplier": "NOASSERTION",
+      "comment": "BLOCKED: no official runner executable is published for this contract"
     }
   ],
   "relationships": [
     {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-pypdfium2"},
     {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PDFium"},
-    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PaddleOCR"}
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PaddlePaddle"},
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PaddleOCR"},
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PaddleX"},
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PPOCRv5Models"},
+    {"spdxElementId": "SPDXRef-DOCUMENT", "relationshipType": "DESCRIBES", "relatedSpdxElement": "SPDXRef-PaddleOCRRunner"}
   ]
 }
