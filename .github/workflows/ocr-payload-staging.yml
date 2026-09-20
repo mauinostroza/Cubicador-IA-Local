@@ -4,14 +4,6 @@ name: OCR payload staging (closed preview)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "backend/ocr-release.lock.json"
-      - "backend/scripts/build_ocr_staging.py"
-      - "backend/scripts/verify_release_contract.py"
-      - "backend/docs/dependencies/**"
-      - ".github/workflows/ocr-payload-staging.yml"
 
 permissions:
   contents: read

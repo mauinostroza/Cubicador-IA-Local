@@ -2,25 +2,6 @@ name: Windows Job Object security
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "backend/src/**"
-      - "backend/scripts/**"
-      - "backend/tests/**"
-      - "backend/pyproject.toml"
-      - "backend/ocr-release.lock.json"
-      - "backend/docs/dependencies/**"
-      - ".github/workflows/windows-job-object.yml"
-  pull_request:
-    paths:
-      - "backend/src/**"
-      - "backend/scripts/**"
-      - "backend/tests/**"
-      - "backend/pyproject.toml"
-      - "backend/ocr-release.lock.json"
-      - "backend/docs/dependencies/**"
-      - ".github/workflows/windows-job-object.yml"
 
 jobs:
   smoke:
