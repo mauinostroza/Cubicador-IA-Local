@@ -142,7 +142,8 @@ class AuditStore:
 
 
 class AuditLog:
-    _ALLOWED_KEYS = {"duration_ms", "bytes", "exit_code", "detail_code"}
+    _ALLOWED_KEYS = {"duration_ms", "bytes", "exit_code", "detail_code", "worker_pid",
+                     "executable_sha256", "decision", "rule_id"}
     _TERMINAL = {"job_completed", "job_failed"}
 
     def __init__(self, store: AuditStore, path: Path, job_id: str):
@@ -156,7 +157,10 @@ class AuditLog:
     def append(self, event: str, status: str, **metrics: int | str) -> None:
         if self._terminal:
             raise SecurityViolation("El log ya posee un evento terminal")
-        if not event.isidentifier() or not status.isidentifier() or set(metrics) - self._ALLOWED_KEYS:
+        if (not isinstance(event, str) or not event or len(event) > 64
+                or any(ch not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for ch in event)
+                or not event[0].isalpha() or not status.isidentifier()
+                or set(metrics) - self._ALLOWED_KEYS):
             raise SecurityViolation("Campo de auditoría no permitido")
         if any(isinstance(value, str) and len(value) > 64 for value in metrics.values()):
             raise SecurityViolation("Valor de auditoría demasiado largo")

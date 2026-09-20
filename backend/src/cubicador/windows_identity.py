@@ -46,6 +46,8 @@ class ChildTokenState:
     elevated: bool
     privileges: tuple[str, ...]
     capability_count: int
+    appcontainer_sid_matches: bool
+    token_restricted: bool
     credential_access_status: str = "unknown"
 
 
@@ -164,6 +166,10 @@ class CtypesWindowsIdentityBackend:
         self.advapi32.GetSidSubAuthorityCount.restype = ctypes.POINTER(ctypes.c_ubyte)
         self.advapi32.GetSidSubAuthority.argtypes = [wintypes.LPVOID, wintypes.DWORD]
         self.advapi32.GetSidSubAuthority.restype = ctypes.POINTER(wintypes.DWORD)
+        self.advapi32.EqualSid.argtypes = [wintypes.LPVOID, wintypes.LPVOID]
+        self.advapi32.EqualSid.restype = wintypes.BOOL
+        self.advapi32.IsTokenRestricted.argtypes = [wintypes.HANDLE]
+        self.advapi32.IsTokenRestricted.restype = wintypes.BOOL
         self.kernel32.GetCurrentProcess.restype = wintypes.HANDLE
         self.kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
         self.kernel32.CloseHandle.restype = wintypes.BOOL
@@ -218,13 +224,36 @@ class CtypesWindowsIdentityBackend:
             name = c.create_unicode_buffer(size.value + 1)
             self._check(self.advapi32.LookupPrivilegeNameW(None, c.byref(entry.Luid), name,
                         c.byref(size)), "LookupPrivilegeNameW")
-            # Solo privilegios habilitados cuentan como autoridad efectiva.
-            if entry.Attributes & 0x2:
-                names.append(name.value)
+            # Se enumeran TODOS los privilegios presentes, no solo habilitados.
+            names.append(name.value)
         privileges = tuple(sorted(names))
         return PreparedTokenState(level, elevated, privileges)
 
-    def verify_child_token(self, token: int) -> ChildTokenState:
+    def _privileges_to_delete(self, token: int) -> tuple[int, object]:
+        """Devuelve LUIDs presentes salvo traverse checking para un segundo token."""
+        c, w = self.ctypes, self.wintypes
+        data = self._token_bytes(token, 3)
+        class LUID(c.Structure):
+            _fields_ = [("LowPart", w.DWORD), ("HighPart", c.c_long)]
+        class LUID_AND_ATTRIBUTES(c.Structure):
+            _fields_ = [("Luid", LUID), ("Attributes", w.DWORD)]
+        count = c.cast(data, c.POINTER(w.DWORD)).contents.value
+        offset = (c.sizeof(w.DWORD) + c.alignment(LUID_AND_ATTRIBUTES) - 1) & ~(c.alignment(LUID_AND_ATTRIBUTES) - 1)
+        entries_type = LUID_AND_ATTRIBUTES * count
+        entries = c.cast(c.addressof(data) + offset, c.POINTER(entries_type)).contents
+        selected: list[LUID_AND_ATTRIBUTES] = []
+        for entry in entries:
+            size = w.DWORD(0)
+            self.advapi32.LookupPrivilegeNameW(None, c.byref(entry.Luid), None, c.byref(size))
+            name = c.create_unicode_buffer(size.value + 1)
+            self._check(self.advapi32.LookupPrivilegeNameW(None, c.byref(entry.Luid), name,
+                        c.byref(size)), "LookupPrivilegeNameW")
+            if name.value != "SeChangeNotifyPrivilege":
+                selected.append(LUID_AND_ATTRIBUTES(entry.Luid, 0))
+        result_type = LUID_AND_ATTRIBUTES * len(selected)
+        return len(selected), result_type(*selected)
+
+    def verify_child_token(self, token: int, expected_appcontainer_sid: int) -> ChildTokenState:
         """Verifica el token real del hijo luego de CreateProcess suspendido."""
         c, w = self.ctypes, self.wintypes
         snapshot = self._snapshot(token)
@@ -232,13 +261,21 @@ class CtypesWindowsIdentityBackend:
         is_container = bool(c.cast(is_container_data, c.POINTER(w.DWORD)).contents.value)
         capabilities_data = self._token_bytes(token, 30)
         capability_count = c.cast(capabilities_data, c.POINTER(w.DWORD)).contents.value
+        app_sid_data = self._token_bytes(token, 31)
+        actual_sid = c.cast(app_sid_data, c.POINTER(w.LPVOID)).contents.value
+        if not actual_sid:
+            sid_matches = False
+        else:
+            sid_matches = bool(self.advapi32.EqualSid(w.LPVOID(actual_sid),
+                                                       w.LPVOID(expected_appcontainer_sid)))
+        restricted = bool(self.advapi32.IsTokenRestricted(w.HANDLE(token)))
         return ChildTokenState(is_container, snapshot.integrity_level,
                                snapshot.elevated, snapshot.privileges,
-                               capability_count)
+                               capability_count, sid_matches, restricted)
 
     def prepare(self, appcontainer_name: str) -> PreparedNativeIdentity:
         c, w = self.ctypes, self.wintypes
-        current = w.HANDLE(); restricted = w.HANDLE(); primary = w.HANDLE()
+        current = w.HANDLE(); restricted = w.HANDLE(); pruned = w.HANDLE(); primary = w.HANDLE()
         low_sid = w.LPVOID(); app_sid = w.LPVOID()
         access = self.TOKEN_QUERY | self.TOKEN_DUPLICATE | self.TOKEN_ASSIGN_PRIMARY | self.TOKEN_ADJUST_DEFAULT
         try:
@@ -246,7 +283,11 @@ class CtypesWindowsIdentityBackend:
                         c.byref(current)), "OpenProcessToken")
             self._check(self.advapi32.CreateRestrictedToken(current, self.DISABLE_MAX_PRIVILEGE,
                         0, None, 0, None, 0, None, c.byref(restricted)), "CreateRestrictedToken")
-            self._check(self.advapi32.DuplicateTokenEx(restricted, access, None,
+            delete_count, delete_entries = self._privileges_to_delete(int(restricted.value))
+            self._check(self.advapi32.CreateRestrictedToken(restricted, 0, 0, None,
+                        delete_count, c.cast(delete_entries, w.LPVOID) if delete_count else None,
+                        0, None, c.byref(pruned)), "CreateRestrictedToken(prune privileges)")
+            self._check(self.advapi32.DuplicateTokenEx(pruned, access, None,
                         self.SECURITY_IMPERSONATION, self.TOKEN_PRIMARY, c.byref(primary)),
                         "DuplicateTokenEx")
             self._check(self.advapi32.ConvertStringSidToSidW("S-1-16-4096", c.byref(low_sid)),
@@ -269,6 +310,7 @@ class CtypesWindowsIdentityBackend:
             raise
         finally:
             if low_sid: self.kernel32.LocalFree(low_sid)
+            if pruned: self.kernel32.CloseHandle(w.HANDLE(pruned.value))
             if restricted: self.kernel32.CloseHandle(w.HANDLE(restricted.value))
             if current: self.kernel32.CloseHandle(w.HANDLE(current.value))
 
