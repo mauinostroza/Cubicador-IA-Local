@@ -68,7 +68,7 @@
       "blocked_reason": "El repositorio oficial publica las URL de los modelos PP-OCRv5 mobile, pero no un SHA-256 upstream verificable para los tarball de inferencia. La descarga queda prohibida hasta disponer de un digest oficial.",
       "source_urls": [
         "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_det_infer.tar",
-        "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/PP-OCRv5_mobile_rec_infer.tar",
+        "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/latin_PP-OCRv5_mobile_rec_infer.tar",
         "https://github.com/PaddlePaddle/PaddleOCR"
       ]
     },
@@ -76,10 +76,10 @@
     "ppocrv5_det_inference_json": {"version":"0d63e78e2b680928f6b1747d76a08db6e645efb7","filename":"inference.json","url":"https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det/resolve/0d63e78e2b680928f6b1747d76a08db6e645efb7/inference.json?download=true","sha256":"05feef1acb00aa4cd7362b15f7f501fc4f99d7b1fa73c1c871e0c7b1504b0f5c","size_bytes":229777,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"0d63e78e2b680928f6b1747d76a08db6e645efb7"},
     "ppocrv5_det_parameters": {"version":"0d63e78e2b680928f6b1747d76a08db6e645efb7","filename":"inference.pdiparams","url":"https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det/resolve/0d63e78e2b680928f6b1747d76a08db6e645efb7/inference.pdiparams?download=true","sha256":"afa1820cb16c1fd0dad589d0f8b389139061c1ef6d68019685fd07be997dda5b","size_bytes":4692937,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"0d63e78e2b680928f6b1747d76a08db6e645efb7"},
     "ppocrv5_det_inference_yml": {"version":"0d63e78e2b680928f6b1747d76a08db6e645efb7","filename":"inference.yml","url":"https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_det/resolve/0d63e78e2b680928f6b1747d76a08db6e645efb7/inference.yml?download=true","sha256":"98069072e1b6b37d727fd9d9f11725faa46d6ea0de012f2ed26caea011c37699","size_bytes":903,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"0d63e78e2b680928f6b1747d76a08db6e645efb7"},
-    "ppocrv5_rec_config_json": {"version":"682f20538d8c086cb2128e5cfac775e6c4904e85","filename":"config.json","url":"https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec/resolve/682f20538d8c086cb2128e5cfac775e6c4904e85/config.json?download=true","sha256":"6df1587ae056f0b987125fc894b17f62ae3a12644fa2488d108f19377da9c1a8","size_bytes":352253,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"682f20538d8c086cb2128e5cfac775e6c4904e85"},
-    "ppocrv5_rec_inference_json": {"version":"682f20538d8c086cb2128e5cfac775e6c4904e85","filename":"inference.json","url":"https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec/resolve/682f20538d8c086cb2128e5cfac775e6c4904e85/inference.json?download=true","sha256":"24587345250c7332d0fc6f9a44e794d078cdaeb64c302fef906f325619de2569","size_bytes":217724,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"682f20538d8c086cb2128e5cfac775e6c4904e85"},
-    "ppocrv5_rec_parameters": {"version":"682f20538d8c086cb2128e5cfac775e6c4904e85","filename":"inference.pdiparams","url":"https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec/resolve/682f20538d8c086cb2128e5cfac775e6c4904e85/inference.pdiparams?download=true","sha256":"2460da90875937c94db97eba74ae3d9e5d4c4c57c42f1f41531c09a26bcc771a","size_bytes":16458665,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"682f20538d8c086cb2128e5cfac775e6c4904e85"},
-    "ppocrv5_rec_inference_yml": {"version":"682f20538d8c086cb2128e5cfac775e6c4904e85","filename":"inference.yml","url":"https://huggingface.co/PaddlePaddle/PP-OCRv5_mobile_rec/resolve/682f20538d8c086cb2128e5cfac775e6c4904e85/inference.yml?download=true","sha256":"5dfeb2777f6d0db8177d8128a8acfcf6e6276dc4ac73ea3bf0dc06d6a5e85d8e","size_bytes":148345,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"682f20538d8c086cb2128e5cfac775e6c4904e85"},
+    "latin_ppocrv5_rec_config_json": {"version":"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57","filename":"config.json","url":"https://huggingface.co/PaddlePaddle/latin_PP-OCRv5_mobile_rec/resolve/ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57/config.json?download=true","sha256":"e0f5ccc44fe86254956f27746058bc4cf88d86145668cecf22ba5dd962483c80","size_bytes":17742,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57"},
+    "latin_ppocrv5_rec_inference_json": {"version":"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57","filename":"inference.json","url":"https://huggingface.co/PaddlePaddle/latin_PP-OCRv5_mobile_rec/resolve/ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57/inference.json?download=true","sha256":"820b2ee8e5072de5156c3d55124c2b03c82ef278d59f453f857c0789bacb4da1","size_bytes":217712,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57"},
+    "latin_ppocrv5_rec_parameters": {"version":"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57","filename":"inference.pdiparams","url":"https://huggingface.co/PaddlePaddle/latin_PP-OCRv5_mobile_rec/resolve/ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57/inference.pdiparams?download=true","sha256":"53cdc8b481a7394bb108f96d0fb3432b0a8f392e22c7d18f06dbb2d42b8b25f9","size_bytes":7965915,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57"},
+    "latin_ppocrv5_rec_inference_yml": {"version":"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57","filename":"inference.yml","url":"https://huggingface.co/PaddlePaddle/latin_PP-OCRv5_mobile_rec/resolve/ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57/inference.yml?download=true","sha256":"0bbe984570f597af3638e50bdf2e8276f3ab26a61966096538b3b0d1849f5c84","size_bytes":6817,"license_spdx":["Apache-2.0"],"status":"verified_upstream_hf","source_commit":"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57"},
     "paddlepaddle_windows_x64_cp312": {
       "version": "3.2.0",
       "filename": "paddlepaddle-3.2.0-cp312-cp312-win_amd64.whl",
@@ -177,28 +177,28 @@
         "kind": "file"
       },
       {
-        "artifact": "ppocrv5_rec_config_json",
+        "artifact": "latin_ppocrv5_rec_config_json",
         "component": "models",
         "source": "models/rec/config.json",
         "destination": "paddle/models/rec/config.json",
         "kind": "file"
       },
       {
-        "artifact": "ppocrv5_rec_inference_json",
+        "artifact": "latin_ppocrv5_rec_inference_json",
         "component": "models",
         "source": "models/rec/inference.json",
         "destination": "paddle/models/rec/inference.json",
         "kind": "file"
       },
       {
-        "artifact": "ppocrv5_rec_parameters",
+        "artifact": "latin_ppocrv5_rec_parameters",
         "component": "models",
         "source": "models/rec/inference.pdiparams",
         "destination": "paddle/models/rec/inference.pdiparams",
         "kind": "file"
       },
       {
-        "artifact": "ppocrv5_rec_inference_yml",
+        "artifact": "latin_ppocrv5_rec_inference_yml",
         "component": "models",
         "source": "models/rec/inference.yml",
         "destination": "paddle/models/rec/inference.yml",
@@ -210,7 +210,7 @@
     "Este archivo es un contrato de release y no activa ninguna descarga ni ejecución.",
     "El staging descarga únicamente pypdfium2 y PaddlePaddle desde URL inmutable de PyPI, verificando tamaño y SHA-256 antes de extraer.",
     "PaddleOCR y PaddleX se conservan como referencias de auditoría, pero están excluidos del payload por incorporar rutas y dependencias de red innecesarias.",
-    "Los ocho archivos directos PP-OCRv5 están fijados a commits oficiales de Hugging Face con tamaño y SHA-256; los tarballs permanecen prohibidos.",
+    "Los cuatro archivos de detección PP-OCRv5 y cuatro de reconocimiento latin_PP-OCRv5 están fijados a commits oficiales de Hugging Face con tamaño y SHA-256; los tarballs permanecen prohibidos.",
     "El runner Windows continúa bloqueado y por sí solo impide ensamblar o activar el payload.",
     "No se aceptan hashes calculados desde un payload local como sustituto de una fuente y procedencia fijadas.",
     "Poppler se conserva únicamente para pruebas legacy/dev explícitas y no forma parte del payload de producción.",

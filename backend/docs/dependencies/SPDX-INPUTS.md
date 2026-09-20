@@ -12,7 +12,7 @@ verified SHA-256/size.
 | Paddle runtime | `paddlepaddle` 3.2.0 CPython 3.12 Windows x64 wheel | `Apache-2.0` | PyPI JSON record and pinned wheel SHA-256 |
 | OCR package references | `paddleocr` 3.2.0 + `paddlex` 3.2.1 wheels | `Apache-2.0` | **EXCLUDED** from payload due download/network paths; hashes retained only for audit |
 | OCR runner | PaddleOCR CPU/mobile Windows runner executable | `Apache-2.0` | **BLOCKED**: no official runner artifact for this contract |
-| OCR models | Eight direct PP-OCRv5 mobile detection/recognition files | `Apache-2.0` | Immutable Hugging Face commits plus per-file SHA-256 and size in the lock; tarballs prohibited |
+| OCR models | Four PP-OCRv5 mobile detection files + four `latin_PP-OCRv5_mobile_rec` files | `Apache-2.0` | Immutable Hugging Face commits plus per-file SHA-256 and size in the lock; tarballs prohibited |
 | Legacy development tool | Poppler, never in release payload | `GPL-2.0-or-later` | Local developer installation only |
 
 Hashes, sizes and immutable URLs for verified wheels and direct model files are recorded in

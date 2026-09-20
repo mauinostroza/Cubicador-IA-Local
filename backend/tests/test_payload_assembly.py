@@ -9,6 +9,15 @@ from cubicador.toolchain import TrustedToolchain
 def sha(data): return hashlib.sha256(data).hexdigest()
 
 class PayloadAssemblyTests(unittest.TestCase):
+    def test_release_contract_uses_latin_recognition_model(self):
+        spec=json.loads((Path(__file__).parents[1]/"ocr-release.lock.json").read_text("utf-8"))
+        rec={name:value for name,value in spec["artifacts"].items() if name.startswith("latin_ppocrv5_rec_")}
+        self.assertEqual(len(rec),4)
+        self.assertEqual({item["source_commit"] for item in rec.values()}, {"ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57"})
+        self.assertTrue(all("/PaddlePaddle/latin_PP-OCRv5_mobile_rec/resolve/" in item["url"] for item in rec.values()))
+        assembly={item["artifact"] for item in spec["payload_assembly"]["inputs"]}
+        self.assertTrue(set(rec) <= assembly)
+
     def fixture(self, root, *, blocked=None, wheel_entries=None):
         source = root / "source"; source.mkdir()
         wheel_entries = wheel_entries or {"paddle/__init__.py": b"runtime", "paddle/base/core.pyd": b"binary"}

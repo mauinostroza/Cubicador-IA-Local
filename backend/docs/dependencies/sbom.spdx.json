@@ -74,7 +74,7 @@
     {
       "SPDXID": "SPDXRef-PPOCRv5Models",
       "name": "PP-OCRv5 mobile inference models",
-      "versionInfo": "det@0d63e78e2b680928f6b1747d76a08db6e645efb7 + rec@682f20538d8c086cb2128e5cfac775e6c4904e85",
+      "versionInfo": "det@0d63e78e2b680928f6b1747d76a08db6e645efb7 + latin-rec@ab2cd5cc5fa6309be2e5acdfe66eca2c2c127d57",
       "downloadLocation": "NOASSERTION",
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "Apache-2.0",

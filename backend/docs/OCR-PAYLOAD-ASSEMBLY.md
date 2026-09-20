@@ -8,7 +8,8 @@ El payload se publica de forma atómica solo cuando el cierre schema 2 incluye:
 
 - runner Windows x64 mínimo;
 - runtime Paddle CPU;
-- ocho archivos directos de detección y reconocimiento PP-OCRv5 mobile.
+- cuatro archivos de detección PP-OCRv5 mobile y cuatro archivos del
+  reconocimiento oficial `latin_PP-OCRv5_mobile_rec`, adecuado para español.
 
 El diccionario de caracteres no es un activo separado: está embebido por el
 modelo oficial de reconocimiento en `config.json`/`inference.yml`. Duplicarlo

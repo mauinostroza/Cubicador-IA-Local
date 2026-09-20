@@ -8,8 +8,8 @@ Verified upstream package inputs currently pinned:
 - `pypdfium2` 5.3.0 Windows x64: BSD-3-Clause, Apache-2.0, PDFium and the
   bundled third-party notices included by the wheel.
 - `paddlepaddle` 3.2.0 CPython 3.12 Windows x64: Apache-2.0.
-- PP-OCRv5 mobile detection and recognition: eight direct files from immutable
-  Hugging Face commits, each pinned by SHA-256 and size: Apache-2.0. These are
+- PP-OCRv5 mobile detection and `latin_PP-OCRv5_mobile_rec` recognition: eight
+  direct files from immutable Hugging Face commits, each pinned by SHA-256 and size: Apache-2.0. These are
   assembly inputs, not PyPI staging `build_inputs`.
 
 Reference-only packages, explicitly excluded from the release payload because
