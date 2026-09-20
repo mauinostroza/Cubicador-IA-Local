@@ -40,6 +40,23 @@ def validate(lock_path: Path) -> list[str]:
                 errors.append(f"SHA-256 inválido para asset verificado: {name}")
             if name not in verified_inputs:
                 errors.append(f"asset verificado no declarado en build_inputs: {name}")
+        elif status == "verified_upstream_hf":
+            for field in ("version", "filename", "url", "sha256", "size_bytes", "source_commit"):
+                if not artifact.get(field):
+                    errors.append(f"asset HF verificado incompleto: {name}.{field}")
+            if name in verified_inputs:
+                errors.append(f"asset HF no pertenece al staging PyPI build_inputs: {name}")
+            if artifact.get("version") != artifact.get("source_commit"):
+                errors.append(f"commit/version HF no coincide: {name}")
+            if (not isinstance(artifact.get("url"), str)
+                    or not artifact["url"].startswith("https://huggingface.co/PaddlePaddle/")
+                    or f"/resolve/{artifact.get('source_commit')}/" not in artifact["url"]):
+                errors.append(f"URL HF no está fijada al commit: {name}")
+            digest = artifact.get("sha256")
+            if (not isinstance(artifact.get("size_bytes"), int) or artifact["size_bytes"] <= 0
+                    or not isinstance(digest, str) or len(digest) != 64
+                    or any(char not in "0123456789abcdef" for char in digest)):
+                errors.append(f"pin HF inválido: {name}")
         elif str(status).startswith("blocked_"):
             for field in ("version", "filename", "url", "sha256", "size_bytes"):
                 if artifact.get(field) is not None:

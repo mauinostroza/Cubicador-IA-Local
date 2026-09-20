@@ -8,6 +8,9 @@ Verified upstream package inputs currently pinned:
 - `pypdfium2` 5.3.0 Windows x64: BSD-3-Clause, Apache-2.0, PDFium and the
   bundled third-party notices included by the wheel.
 - `paddlepaddle` 3.2.0 CPython 3.12 Windows x64: Apache-2.0.
+- PP-OCRv5 mobile detection and recognition: eight direct files from immutable
+  Hugging Face commits, each pinned by SHA-256 and size: Apache-2.0. These are
+  assembly inputs, not PyPI staging `build_inputs`.
 
 Reference-only packages, explicitly excluded from the release payload because
 their standard pipelines include download/network paths:
@@ -26,9 +29,9 @@ Blocked inputs:
   notices are the only accepted provenance at this checkpoint.
 - `paddle_ocr_runner` is blocked because PaddleOCR does not publish the
   required official Windows runner executable.
-- PP-OCRv5 mobile model tarballs are blocked because the official model host
-  publishes URLs but no upstream SHA-256 or exact artifact notice that can be
-  independently verified.
+- PP-OCRv5 tarballs remain blocked and prohibited. The accepted alternative is
+  the eight individually pinned upstream files. Recognition configuration
+  embeds its character dictionary; there is no second dictionary artifact.
 
 This is an input/staging checklist, not a complete transitive SBOM and not a
 replacement for the upstream notices. The

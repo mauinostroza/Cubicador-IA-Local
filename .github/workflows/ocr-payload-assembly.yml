@@ -1,0 +1,33 @@
+name: OCR payload assembly (closed)
+
+on:
+  push:
+    paths:
+      - "backend/ocr-release.lock.json"
+      - "backend/scripts/assemble_ocr_payload.py"
+      - "backend/tests/test_payload_assembly.py"
+      - ".github/workflows/ocr-payload-assembly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-closed-contract:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - name: Pruebas reproducibles de ensamblado
+        working-directory: backend
+        run: python -m unittest discover -s tests -p test_payload_assembly.py -v
+      - name: Confirmar que el contrato real falla cerrado
+        shell: pwsh
+        working-directory: backend
+        run: |
+          python scripts/assemble_ocr_payload.py --source-root . --output ocr-payload
+          if ($LASTEXITCODE -ne 2) { throw "El ensamblado debía permanecer bloqueado" }
+          if (Test-Path ocr-payload) { throw "Se creó un payload parcial" }

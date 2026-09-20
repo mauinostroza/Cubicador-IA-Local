@@ -74,13 +74,13 @@
     {
       "SPDXID": "SPDXRef-PPOCRv5Models",
       "name": "PP-OCRv5 mobile inference models",
-      "versionInfo": "NOASSERTION",
+      "versionInfo": "det@0d63e78e2b680928f6b1747d76a08db6e645efb7 + rec@682f20538d8c086cb2128e5cfac775e6c4904e85",
       "downloadLocation": "NOASSERTION",
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "Apache-2.0",
       "copyrightText": "NOASSERTION",
-      "supplier": "NOASSERTION",
-      "comment": "BLOCKED: official URLs are documented, but no upstream SHA-256 is published"
+      "supplier": "Organization: PaddlePaddle Authors",
+      "comment": "EIGHT DIRECT FILES: immutable upstream commits, per-file SHA-256 and sizes are recorded in ocr-release.lock.json; tarballs are prohibited. This staging-input SBOM does not aggregate their distinct checksums."
     },
     {
       "SPDXID": "SPDXRef-PaddleOCRRunner",
