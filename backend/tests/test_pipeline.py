@@ -1,12 +1,15 @@
+import os
 import subprocess
 import json
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
 from openpyxl import load_workbook
+from pydantic import ValidationError
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -16,6 +19,8 @@ from cubicador.pdf_text import PdfText
 from cubicador.pipeline import process_pdf
 from cubicador.adapters import parse_number
 from cubicador.adapters import LlamaServerInterpreter
+from cubicador.excel import export_excel
+from cubicador.models import Evidence, ExtractionResult, QuantityRow, QuantityValue
 from cubicador.runtime import AuditStore, JobWorkspace, run_command, safe_output_path
 from cubicador.security import SecurityPolicy, SecurityViolation
 
@@ -290,6 +295,126 @@ class SecurityTests(unittest.TestCase):
                 policy=SecurityPolicy(windows_job_objects_enabled=sys.platform == "win32"))
         timer.cancel()
         self.assertLess(time.monotonic() - started, 2)
+
+
+class ExcelFormulaInjectionTests(unittest.TestCase):
+    """Defecto 1: el PDF (vía LLM/OCR) es no confiable; openpyxl convierte en
+    fórmula real cualquier string que comience con '='. Este test debe fallar
+    si alguien revierte la corrección de excel.py."""
+
+    def _malicious_result(self) -> ExtractionResult:
+        evidencia = Evidence(page=1, line_start=1, line_end=1, text='=HYPERLINK("http://evil.test","clic")')
+        row = QuantityRow(
+            item="=1+1",
+            descripcion='=HYPERLINK("http://evil.test","clic")',
+            unidad="m3",
+            cells_original=["=1+1", "m3", "12,5"],
+            quantities=[QuantityValue(column="=cmd|' /C calc'!A0", original="=1+1", numeric_value=None, parse_status="invalid", warning="=2+2")],
+            pagina=1,
+            evidencia=evidencia,
+        )
+        return ExtractionResult(
+            archivo="plano.pdf", tabla_encontrada=True, titulo_tabla="=SUM(A1)", filas=[row],
+            requiere_revision=True, candidatos=["=1+1"], advertencias=["=1+1"],
+            sha256="a" * 64, page_count=1, extractor_version="test",
+        )
+
+    def test_formula_like_values_are_stored_as_text_not_formulas(self):
+        with tempfile.TemporaryDirectory() as directory:
+            xlsx = Path(directory) / "out.xlsx"
+            export_excel(self._malicious_result(), xlsx)
+            workbook = load_workbook(xlsx)
+            self.assertEqual(workbook.sheetnames, ["Cantidades", "Pendientes", "Trazabilidad"])
+            checked_a_formula_looking_cell = False
+            for sheet in workbook.worksheets:
+                for row_cells in sheet.iter_rows():
+                    for cell in row_cells:
+                        if isinstance(cell.value, str) and cell.value.startswith("="):
+                            checked_a_formula_looking_cell = True
+                            self.assertNotEqual(
+                                cell.data_type, "f",
+                                f"{sheet.title}!{cell.coordinate} quedó como fórmula real: {cell.value!r}",
+                            )
+                            self.assertEqual(cell.data_type, "s")
+            self.assertTrue(checked_a_formula_looking_cell, "El fixture no generó ninguna celda con apariencia de fórmula")
+            # Sin pérdida de datos: el texto original se conserva tal cual (sin apóstrofo de escape).
+            self.assertEqual(workbook["Cantidades"].cell(row=2, column=1).value, "=1+1")
+
+
+class ModelSanitizationTests(unittest.TestCase):
+    """Defecto 2: caracteres de control C0/C1 y longitudes sin límite en campos de texto libre."""
+
+    def _row(self, **overrides) -> QuantityRow:
+        base = dict(
+            item="1.1", descripcion="Hormigón", unidad="m3",
+            cells_original=["1.1", "Hormigón", "m3", "12,5"],
+            quantities=[QuantityValue(column="m3", original="12,5", numeric_value=12.5, parse_status="parsed")],
+            pagina=1,
+            evidencia=Evidence(page=1, line_start=1, line_end=1, text="1.1  Hormigón  m3  12,5"),
+        )
+        base.update(overrides)
+        return QuantityRow(**base)
+
+    def test_ansi_escape_sequence_is_stripped_from_item_and_descripcion(self):
+        row = self._row(item="1.1\x1b[31m", descripcion="Hormig\x1bón armado")
+        self.assertNotIn("\x1b", row.item)
+        self.assertNotIn("\x1b", row.descripcion)
+        self.assertEqual(row.item, "1.1[31m")
+        self.assertEqual(row.descripcion, "Hormigón armado")
+
+    def test_excessively_long_item_is_rejected_by_pydantic(self):
+        with self.assertRaises(ValidationError):
+            self._row(item="x" * 1000)
+
+    def test_excessively_long_descripcion_is_rejected_by_pydantic(self):
+        with self.assertRaises(ValidationError):
+            self._row(descripcion="y" * 1000)
+
+    def test_evidence_text_strips_control_chars_but_preserves_layout_spacing(self):
+        evidencia = Evidence(page=1, line_start=1, line_end=1, text="1.1\x1b  Hormig\x07ón   m3  12,5")
+        self.assertNotIn("\x1b", evidencia.text)
+        self.assertNotIn("\x07", evidencia.text)
+        self.assertIn("  ", evidencia.text)  # separador de dos espacios, evidencia de layout, no se colapsa
+
+    def test_evidence_text_over_max_length_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            Evidence(page=1, line_start=1, line_end=1, text="x" * 5000)
+
+    def test_sha256_pattern_rejects_non_hex_placeholder(self):
+        with self.assertRaises(ValidationError):
+            ExtractionResult(archivo="x.pdf", tabla_encontrada=False, titulo_tabla=None, filas=[], sha256="pending", page_count=1, extractor_version="v")
+
+    def test_sha256_pattern_accepts_valid_lowercase_hex(self):
+        result = ExtractionResult(archivo="x.pdf", tabla_encontrada=False, titulo_tabla=None, filas=[], sha256="a" * 64, page_count=1, extractor_version="v")
+        self.assertEqual(result.sha256, "a" * 64)
+
+
+class AuditRetentionTests(unittest.TestCase):
+    """Defecto 3: un trabajo muerto sin evento terminal (SIGKILL/OOM/corte de
+    energía) no debe bloquear la auditoría para siempre."""
+
+    def test_old_non_terminal_logs_are_purged_when_retention_is_full(self):
+        with tempfile.TemporaryDirectory() as directory:
+            policy = SecurityPolicy(max_audit_files=2, max_audit_orphan_seconds=1)
+            store = AuditStore(directory, policy)
+            for _ in range(2):
+                orphan = store.start_job()
+                orphan.append("job_started", "ok")  # nunca job_completed/job_failed: simula un proceso muerto
+                stale = time.time() - 10
+                os.utime(orphan.path, (stale, stale))
+            # La retención está llena (2/2) y ambos logs son huérfanos y viejos: debe purgar y continuar.
+            third = store.start_job()
+            self.assertTrue(third.path.exists())
+            self.assertLessEqual(len(list((Path(directory) / ".cubicador-audit").glob("*.jsonl"))), 2)
+
+    def test_recent_non_terminal_logs_still_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            policy = SecurityPolicy(max_audit_files=1, max_audit_orphan_seconds=3600)
+            store = AuditStore(directory, policy)
+            active = store.start_job()
+            active.append("job_started", "ok")  # log activo y reciente, sin evento terminal
+            with self.assertRaises(SecurityViolation):
+                store.start_job()
 
 
 if __name__ == "__main__":

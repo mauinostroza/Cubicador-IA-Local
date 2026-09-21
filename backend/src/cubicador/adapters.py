@@ -47,7 +47,9 @@ class HeuristicInterpreter(TableInterpreter):
         lines = [line.strip() for line in candidate.text.splitlines()[1:] if line.strip()]
         header_at = next((i for i, line in enumerate(lines) if "item" in line.lower().replace("í", "i") and ("desc" in line.lower() or "cantidad" in line.lower())), None)
         if header_at is None:
-            return ExtractionResult(archivo=filename, tabla_encontrada=True, titulo_tabla=candidate.title, filas=[], requiere_revision=True, advertencias=["No se identificó la estructura de columnas"], sha256="pending", page_count=1, extractor_version="pending")
+            # Marcador con formato de hash válido (64 hex): pipeline.py lo reemplaza por el
+            # digest real justo después de interpret(); "pending" no cumplía el patrón sha256.
+            return ExtractionResult(archivo=filename, tabla_encontrada=True, titulo_tabla=candidate.title, filas=[], requiere_revision=True, advertencias=["No se identificó la estructura de columnas"], sha256="0" * 64, page_count=1, extractor_version="pending")
         columns = [cell.strip() for cell in re.split(r"\s{2,}|\t+", lines[header_at]) if cell.strip()]
         data_lines = lines[header_at + 1 :]
         rows: list[QuantityRow] = []
@@ -75,7 +77,7 @@ class HeuristicInterpreter(TableInterpreter):
             line_no = next((i for i, source in enumerate(candidate.text.splitlines(), 1) if source.strip() == line), 1)
             rows.append(QuantityRow(item=cells[0], descripcion=description, unidad=unit, cells_original=cells, quantities=quantities, tipo_fila=kind, pagina=candidate.page, evidencia=Evidence(page=candidate.page, line_start=line_no, line_end=line_no, text=line)))
         warnings = [] if rows else ["Se localizó la tabla, pero no se reconocieron filas válidas"]
-        return ExtractionResult(archivo=filename, tabla_encontrada=True, titulo_tabla=candidate.title, columns=columns, filas=rows, advertencias=warnings, sha256="pending", page_count=1, extractor_version="pending")
+        return ExtractionResult(archivo=filename, tabla_encontrada=True, titulo_tabla=candidate.title, columns=columns, filas=rows, advertencias=warnings, sha256="0" * 64, page_count=1, extractor_version="pending")
 
 
 class LlamaServerInterpreter(TableInterpreter):

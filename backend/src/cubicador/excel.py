@@ -8,6 +8,14 @@ from openpyxl.styles import Font, PatternFill
 from .models import ExtractionResult
 
 
+def _append_safe(sheet, values: list) -> None:
+    """Añade una fila forzando texto: openpyxl convierte en fórmula todo string que empiece con "="."""
+    sheet.append(values)
+    for cell in sheet[sheet.max_row]:
+        if isinstance(cell.value, str):
+            cell.data_type = "s"
+
+
 def export_excel(result: ExtractionResult, target: str | Path, max_bytes: int | None = None) -> Path:
     output = Path(target)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -21,7 +29,7 @@ def export_excel(result: ExtractionResult, target: str | Path, max_bytes: int | 
         cell.fill = PatternFill("solid", fgColor="1F4E78")
     for row in result.filas:
         for q in row.quantities:
-            sheet.append([row.item, row.descripcion, q.column, q.numeric_value, q.original, q.parse_status, q.warning, row.tipo_fila, row.pagina, result.archivo, result.titulo_tabla])
+            _append_safe(sheet, [row.item, row.descripcion, q.column, q.numeric_value, q.original, q.parse_status, q.warning, row.tipo_fila, row.pagina, result.archivo, result.titulo_tabla])
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
     widths = (14, 48, 18, 16, 18, 12, 30, 12, 10, 28, 36)
@@ -31,15 +39,15 @@ def export_excel(result: ExtractionResult, target: str | Path, max_bytes: int | 
     pending.append(["Requiere revisión", "Advertencia", "Candidatos"])
     warnings = result.advertencias or (["Revisar selección de tabla"] if result.requiere_revision else [])
     for warning in warnings:
-        pending.append(["Sí" if result.requiere_revision else "No", warning, " | ".join(result.candidatos)])
+        _append_safe(pending, ["Sí" if result.requiere_revision else "No", warning, " | ".join(result.candidatos)])
     for row in result.filas:
         for quantity in row.quantities:
             if quantity.parse_status != "parsed":
-                pending.append(["Sí", f"{row.item}/{quantity.column}: {quantity.warning}", quantity.original])
+                _append_safe(pending, ["Sí", f"{row.item}/{quantity.column}: {quantity.warning}", quantity.original])
     trace = workbook.create_sheet("Trazabilidad")
     trace.append(["Ítem", "Página", "Línea inicio", "Línea fin", "Evidencia", "Celdas originales", "SHA-256", "Extractor"])
     for row in result.filas:
-        trace.append([row.item, row.pagina, row.evidencia.line_start, row.evidencia.line_end, row.evidencia.text, " | ".join(row.cells_original), result.sha256, result.extractor_version])
+        _append_safe(trace, [row.item, row.pagina, row.evidencia.line_start, row.evidencia.line_end, row.evidencia.text, " | ".join(row.cells_original), result.sha256, result.extractor_version])
     fd, temporary = tempfile.mkstemp(prefix=output.stem, suffix=".xlsx", dir=output.parent)
     os.close(fd)
     try:

@@ -40,6 +40,8 @@ class SecurityPolicy:
     max_audit_files: int = 100
     windows_job_objects_enabled: bool = True
     termination_grace_seconds: int = 5
+    # Holgado frente a los timeouts de 120 s encadenados, para no purgar un trabajo aún en curso.
+    max_audit_orphan_seconds: int = 3600
 
     def __post_init__(self) -> None:
         positive = (
@@ -55,7 +57,7 @@ class SecurityPolicy:
             self.windows_active_process_limit, self.windows_cpu_rate_percent,
             self.max_audit_bytes,
             self.max_audit_total_bytes, self.max_audit_files,
-            self.termination_grace_seconds,
+            self.termination_grace_seconds, self.max_audit_orphan_seconds,
         )
         if any(value <= 0 for value in positive) or self.max_queued_jobs < 0:
             raise ValueError("Todos los límites deben ser positivos y la cola no negativa")

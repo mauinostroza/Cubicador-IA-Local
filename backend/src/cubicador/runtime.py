@@ -105,8 +105,9 @@ class AuditStore:
         with _AuditLock(self.lock_path):
             files = sorted(self.root.glob("*.jsonl"), key=lambda p: p.stat().st_mtime_ns)
             total = sum(p.stat().st_size for p in files)
+            now = time.time()
             while files and (len(files) >= self.policy.max_audit_files or total >= self.policy.max_audit_total_bytes):
-                victim = next((path for path in files if self._is_terminal(path)), None)
+                victim = next((path for path in files if self._is_purgeable(path, now)), None)
                 if victim is None:
                     raise SecurityViolation("Retención llena con trabajos de auditoría activos")
                 files.remove(victim); total -= victim.stat().st_size; victim.unlink()
@@ -114,6 +115,15 @@ class AuditStore:
             path = self.root / f"{job_id}.jsonl"
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600); os.close(fd)
         return AuditLog(self, path, job_id)
+
+    def _is_purgeable(self, path: Path, now: float) -> bool:
+        """Terminal, o abandonado: un proceso muerto por SIGKILL/OOM nunca llega a escribir su evento terminal."""
+        if self._is_terminal(path):
+            return True
+        try:
+            return (now - path.stat().st_mtime) > self.policy.max_audit_orphan_seconds
+        except OSError:
+            return False
 
     @staticmethod
     def _is_terminal(path: Path) -> bool:
